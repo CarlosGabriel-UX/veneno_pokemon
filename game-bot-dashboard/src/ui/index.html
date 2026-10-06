@@ -126,6 +126,18 @@
           <label>Precisão (0–1) <input data-path="capture.confidence" type="number" step="0.05" min="0.3" max="1"></label>
           <label>Intervalo (s) <input data-path="capture.interval" type="number" step="0.1" min="0.1"></label>
         </div>
+        <h3 class="sub-title">Confirmar captura</h3>
+        <p class="hint">Recorte a mensagem que o jogo mostra quando a captura dá certo. Depois de cada pokébola, o bot procura essa mensagem e conta a captura nas estatísticas.</p>
+        <div class="success-box">
+          <div id="success-preview" class="success-preview"><span class="muted">Não configurada: só as pokébolas são contadas.</span></div>
+          <div class="row-gap">
+            <button class="btn" id="success-set">Recortar mensagem da tela</button>
+            <button class="btn ghost" id="success-remove" hidden>Remover</button>
+          </div>
+        </div>
+        <div class="fields">
+          <label>Procurar a mensagem por (s) <small>depois de cada pokébola</small> <input data-path="capture.confirm_wait" type="number" step="0.5" min="1"></label>
+        </div>
         <button class="btn primary save">Salvar</button>
       </div>
 
@@ -152,6 +164,7 @@
           <div class="kpi"><span>Tempo ligado (sessão)</span><b id="k-time">0min</b></div>
           <div class="kpi"><span>Batalhas (sessão)</span><b id="k-kills">0</b></div>
           <div class="kpi"><span>Pokébolas (sessão)</span><b id="k-balls">0</b></div>
+          <div class="kpi"><span>Capturas (sessão)</span><b id="k-caught">0</b></div>
           <div class="kpi"><span>Curas (sessão)</span><b id="k-heals">0</b></div>
           <div class="kpi"><span>Pokébolas no total</span><b id="k-total">0</b></div>
         </div>
@@ -171,14 +184,14 @@
             <div id="s-modules" class="bars"></div>
           </section>
           <section>
-            <h3 class="sub-title">Pokébolas por pokémon</h3>
+            <h3 class="sub-title">Por pokémon <small class="muted">pokébolas / capturas</small></h3>
             <table class="table">
-              <thead><tr><th>Pokémon</th><th class="num">Sessão</th><th class="num">Total</th></tr></thead>
+              <thead><tr><th>Pokémon</th><th class="num">Sessão</th><th class="num">Total</th><th class="num">Acerto</th></tr></thead>
               <tbody id="s-pokes"></tbody>
             </table>
           </section>
         </div>
-        <p class="hint">O bot conta as pokébolas jogadas, mas não tem como saber se a captura deu certo. O histórico fica em <code>estatisticas.db</code>.</p>
+        <p class="hint">As capturas só são contadas com a mensagem de sucesso configurada na aba Captura; sem ela, o bot conta só as pokébolas. O histórico fica em <code>estatisticas.db</code>.</p>
         <button id="reset-stats" class="btn ghost small">Zerar histórico</button>
       </div>
 

@@ -32,7 +32,8 @@ Janela para ligar e desligar o bot sem usar o terminal.
 - **Console**: log ao vivo, filtro por módulo e botão para abrir a pasta `logs/` (um arquivo por dia, bom para mandar quando der problema)
 - **Captura**: escolha os pokémons clicando nas fotos, 🔔 para só avisar quando aparecer; **+ Adicionar pokémon** (de um arquivo ou recortando direto da tela); **Testar detecção** mostra um print com o que foi achado e a nota de cada imagem
 - **Rota**: arraste para mudar a ordem, ligue/desligue pontos, tempo de caminhada por ponto, **+ Adicionar ponto** recortando do minimapa; **Testar minimapa**
-- **Estatísticas**: números da sessão, gráficos dos últimos 14 dias e pokébolas por pokémon (salvo em `estatisticas.db`)
+- **Estatísticas**: números da sessão, gráficos dos últimos 14 dias e pokébolas e capturas por pokémon, com a taxa de acerto (salvo em `estatisticas.db`)
+- **Confirmar captura** (aba Captura): recorte da tela a mensagem que o jogo mostra quando a captura dá certo. Depois de cada pokébola, o bot procura essa mensagem por alguns segundos e conta a captura. Ela fica em `imags/captura_ok/sucesso.png`; sem ela, o bot conta só as pokébolas
 - **Ajustes**: grupos que abrem e fecham, com um resumo no título (perfis, coordenadas com **Marcar/Pegar** — posicione o mouse no jogo e aperte **F8** —, cura, segurança, atalhos, batalha e geral); em **Geral** dá para trocar a **cor do painel** (roxo, verde veneno ou azul)
 
 ## Arquivos que o painel cria

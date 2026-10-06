@@ -57,6 +57,7 @@ DEFAULT_CONFIG = {
         "region": [3, 28, 1910, 993],
         "targets": ["croa.png", "croa_2.png"],
         "alert_on": [],  # avisa com som quando aparecer, mesmo sem capturar
+        "confirm_wait": 4,  # segundos procurando a mensagem de sucesso depois de cada pokébola
     },
     "cavebot": {
         "walk_time": 9,
@@ -88,6 +89,9 @@ DEFAULT_CONFIG = {
     "stop_hotkey": "F12",
     "theme": "roxo",  # cor principal do painel: roxo, verde ou azul
 }
+
+# recorte da mensagem do jogo que aparece quando a captura dá certo
+SUCCESS_IMAGE = "captura_ok/sucesso.png"
 
 PICK_HOTKEY = "F8"
 VK_CODES = {f"F{i}": 0x6F + i for i in range(1, 13)}
@@ -189,6 +193,7 @@ class Stats:
         self.kills = 0
         self.heals = 0
         self.balls = {}
+        self.caught = {}
         self.run_seconds = {name: 0.0 for name in MODULES}
         self.started = {}
 
@@ -211,6 +216,10 @@ class Stats:
         self.balls[pokemon] = self.balls.get(pokemon, 0) + 1
         self._exec("INSERT INTO eventos (tipo, nome, modulo) VALUES ('pokebola', ?, ?)", (pokemon, module))
 
+    def capture(self, pokemon, module):
+        self.caught[pokemon] = self.caught.get(pokemon, 0) + 1
+        self._exec("INSERT INTO eventos (tipo, nome, modulo) VALUES ('captura', ?, ?)", (pokemon, module))
+
     def heal(self):
         self.heals += 1
         self._exec("INSERT INTO eventos (tipo, nome, modulo) VALUES ('cura', NULL, 'heal')", ())
@@ -231,6 +240,7 @@ class Stats:
         since = f"-{days - 1} days"
         with self.lock, self._db() as db:
             total_balls = dict(db.execute("SELECT nome, COUNT(*) FROM eventos WHERE tipo='pokebola' GROUP BY nome").fetchall())
+            total_caught = dict(db.execute("SELECT nome, COUNT(*) FROM eventos WHERE tipo='captura' GROUP BY nome").fetchall())
             total_kills = db.execute("SELECT COUNT(*) FROM eventos WHERE tipo='batalha'").fetchone()[0]
             day_events = db.execute(
                 "SELECT date(quando), tipo, COUNT(*) FROM eventos WHERE date(quando) >= date('now','localtime',?) GROUP BY 1, 2",
@@ -250,8 +260,8 @@ class Stats:
             daily.append({"day": d, "balls": ev.get("pokebola", 0), "kills": ev.get("batalha", 0), "seconds": secs})
         return {
             "session": {"seconds_open": now - self.session_start, "run_seconds": run, "kills": self.kills,
-                        "heals": self.heals, "balls": self.balls},
-            "total": {"kills": total_kills, "balls": total_balls},
+                        "heals": self.heals, "balls": self.balls, "caught": self.caught},
+            "total": {"kills": total_kills, "balls": total_balls, "caught": total_caught},
             "daily": daily,
         }
 
@@ -262,6 +272,7 @@ class Stats:
         self.kills = 0
         self.heals = 0
         self.balls = {}
+        self.caught = {}
         self.run_seconds = {name: 0.0 for name in MODULES}
         self.session_start = time.time()
         self.started = {n: time.time() for n in self.started}
@@ -292,6 +303,8 @@ class BotEngine:
         self._pick = None
         self._deadline = None
         self._alerted = {}
+        self._confirm_lock = threading.Lock()
+        self._confirm = None  # (pokémon, módulo, até quando procurar) da última pokébola
 
         threading.Thread(target=self._hotkey_watcher, daemon=True).start()
         threading.Thread(target=self._health_watcher, daemon=True).start()
@@ -759,7 +772,7 @@ class BotEngine:
         pick["points"].append([x, y])
         self._beep()
         # coordenadas salvas na config ficam no "referencial" da janela; recortes usam a tela real
-        if pick["target"] in ("new_pokemon", "new_waypoint"):
+        if pick["target"] in ("new_pokemon", "new_waypoint", "success_msg"):
             dx = dy = 0
         else:
             if not self.config.get("window_ref") and self._game_rect:
@@ -922,8 +935,60 @@ class BotEngine:
                 time.sleep(0.1)
                 self._click(pos.x, pos.y)
                 self.stats.ball(poke, module)
+                self._watch_success(poke, module)
                 caught = True
         return caught
+
+    # ---------- confirmação de captura ----------
+    def has_success_image(self):
+        return (self.img / SUCCESS_IMAGE).exists()
+
+    def set_success_image(self, region):
+        """Recorta a mensagem de captura com sucesso do jogo."""
+        img, _ = self._grab(region)
+        dest = self.img / SUCCESS_IMAGE
+        dest.parent.mkdir(exist_ok=True)
+        _write_png(dest, img)
+        self.log("Mensagem de captura salva: agora o bot conta as capturas confirmadas.", "success")
+        return True
+
+    def remove_success_image(self):
+        path = self.img / SUCCESS_IMAGE
+        if path.exists():
+            path.unlink()
+        self.log("Mensagem de captura removida: o bot volta a contar só as pokébolas.", "info")
+
+    def _watch_success(self, poke, module):
+        """Depois de uma pokébola, procura a mensagem de sucesso por alguns segundos numa thread à parte."""
+        if not self.has_success_image():
+            return
+        until = time.time() + float(self.config["capture"].get("confirm_wait", 4) or 4)
+        with self._confirm_lock:
+            running = self._confirm is not None
+            self._confirm = (poke, module, until)  # outra pokébola só troca o alvo e estende o prazo
+        if not running:
+            threading.Thread(target=self._confirm_loop, daemon=True).start()
+
+    def _confirm_loop(self):
+        conf = self.config["capture"]["confidence"]
+        # a mensagem de uma captura anterior pode continuar na tela: só conta quando ela aparece
+        # (não estava visível e passou a estar), nunca porque já estava lá
+        visible = bool(self._locate(SUCCESS_IMAGE, conf))
+        while True:
+            with self._confirm_lock:
+                poke, module, until = self._confirm
+                if time.time() > until:
+                    self._confirm = None
+                    return
+            time.sleep(0.3)
+            seen = bool(self._locate(SUCCESS_IMAGE, conf))
+            if seen and not visible:
+                self.stats.capture(poke, module)
+                self.log(f"{poke} capturado!", "success", module)
+                with self._confirm_lock:
+                    self._confirm = None
+                return
+            visible = seen
 
     # ---------- módulos ----------
     def _run_battle(self, stop):

@@ -11,6 +11,7 @@ const PICK_TARGETS = {
   "heal.pixel": "Pixel da sua vida",
   new_pokemon: "Recortar pokémon da tela",
   new_waypoint: "Recortar ponto do minimapa",
+  success_msg: "Recortar mensagem de captura",
 };
 const FKEYS = Array.from({ length: 12 }, (_, i) => `F${i + 1}`);
 
@@ -202,15 +203,30 @@ function renderTimer(left) {
   $("#sb-timer").hidden = left == null;
   $("#sb-timer").textContent = left == null ? "" : `Timer: ${fmtDuration(left)}`;
   $("#timer-desc").textContent = left == null ? "Desliga tudo sozinho." : "Desliga tudo em";
-  if (left == null && !timerEditing && $("#timer-select").value && $("#timer-select").value !== "at") {
-    $("#timer-select").value = "";
+  const sel = $("#timer-select");
+  if (timerEditing) return;
+  // a caixa sempre mostra o que está valendo: sem timer = Desligado; com timer = a hora em que desliga
+  let active = $("option[value=active]", sel);
+  if (left == null) {
+    active?.remove();
+    if (sel.value && sel.value !== "at") sel.value = "";
+    return;
   }
+  if (!active) {
+    active = Object.assign(el("option"), { value: "active" });
+    sel.append(active);
+  }
+  const end = new Date(Date.now() + left * 1000);
+  active.textContent = `Às ${end.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
+  if (sel.value !== "active") sel.value = "active";
+  $("#timer-at").hidden = true;
 }
 
 function wireTimer() {
   const sel = $("#timer-select");
   const at = $("#timer-at");
   sel.addEventListener("change", async () => {
+    if (sel.value === "active") return;
     at.hidden = sel.value !== "at";
     if (sel.value === "at") {
       timerEditing = true;
@@ -276,6 +292,12 @@ async function applyPick(target, result) {
   if (target === "new_pokemon") {
     const added = await call("add_pokemon_from_region", pendingPokemonName, result.region);
     await afterPokemonAdded(added);
+    return;
+  }
+  if (target === "success_msg") {
+    await call("set_success_image", result.region);
+    await refreshImages();
+    toast("Mensagem de captura salva");
     return;
   }
   if (target === "new_waypoint") {
@@ -488,6 +510,18 @@ async function refreshImages() {
   images = await call("get_images");
   buildCaptureGrid();
   buildRoute();
+  renderSuccess();
+}
+
+function renderSuccess() {
+  const box = $("#success-preview");
+  if (images.success) {
+    box.replaceChildren(Object.assign(el("img"), { src: images.success, alt: "Mensagem de captura com sucesso" }));
+  } else {
+    box.replaceChildren(el("span", "muted", "Não configurada: só as pokébolas são contadas."));
+  }
+  $("#success-set").textContent = images.success ? "Recortar de novo" : "Recortar mensagem da tela";
+  $("#success-remove").hidden = !images.success;
 }
 
 function openAddPokemon() {
@@ -819,6 +853,7 @@ async function refreshStats() {
   $("#k-time").textContent = fmtDuration(totalRun);
   $("#k-kills").textContent = s.session.kills;
   $("#k-balls").textContent = sessionBalls;
+  $("#k-caught").textContent = Object.values(s.session.caught || {}).reduce((a, b) => a + b, 0);
   $("#k-heals").textContent = s.session.heals;
   $("#k-total").textContent = totalBalls;
 
@@ -854,13 +889,21 @@ async function refreshStats() {
   );
   for (const n of names) {
     const tr = el("tr");
-    tr.append(el("td", null, pretty(n)), el("td", "num", s.session.balls[n] || 0), el("td", "num", s.total.balls[n] || 0));
+    const caughtS = s.session.caught?.[n] || 0;
+    const caughtT = s.total.caught?.[n] || 0;
+    const ballsT = s.total.balls[n] || 0;
+    tr.append(
+      el("td", null, pretty(n)),
+      el("td", "num", `${s.session.balls[n] || 0} / ${caughtS}`),
+      el("td", "num", `${ballsT} / ${caughtT}`),
+      el("td", "num", ballsT && images.success ? `${Math.round((caughtT / ballsT) * 100)}%` : "–"),
+    );
     body.append(tr);
   }
   if (!names.length) {
     const tr = el("tr");
     const td = el("td", "empty", "Nenhuma pokébola jogada ainda.");
-    td.colSpan = 3;
+    td.colSpan = 4;
     tr.append(td);
     body.append(tr);
   }
@@ -933,6 +976,12 @@ function wireUi() {
   $("#pick-cancel").addEventListener("click", () => api.cancel_pick());
   $$("[data-swatch]").forEach((sw) => $(`[data-path="${sw.dataset.swatch}"]`).addEventListener("input", updateSwatches));
   $("#add-poke").addEventListener("click", openAddPokemon);
+  $("#success-set").addEventListener("click", () => startPick("region", "success_msg"));
+  $("#success-remove").addEventListener("click", async () => {
+    if (!confirm("Remover a mensagem de captura? O bot volta a contar só as pokébolas.")) return;
+    await call("remove_success_image");
+    await refreshImages();
+  });
   $("#add-waypoint").addEventListener("click", openAddWaypoint);
   $("#ref-set").addEventListener("click", async () => {
     config = await call("set_window_ref");
@@ -1011,6 +1060,7 @@ async function init() {
   $$("[data-pickkey]").forEach((k) => (k.textContent = pickKey));
   buildModules(images.modules);
   buildCaptureGrid();
+  renderSuccess();
   wireRouteDnD();
   applyConfig();
   wireUi();
