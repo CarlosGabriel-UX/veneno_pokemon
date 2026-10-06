@@ -22,8 +22,9 @@ Janela para ligar e desligar o bot sem usar o terminal.
 
 **Coordenadas que acompanham a janela**: o painel guarda onde a janela do jogo estava quando as coordenadas foram marcadas e ajusta tudo se ela for movida.
 
-**Topo e lateral**
-- Indicadores **Jogo** (verde = em foco, amarelo = aberto atrás de outra janela) e **Driver**
+**Topo, lateral e rodapé**
+- Módulos em uma linha cada; o ligado ganha borda verde e mostra há quanto tempo está rodando
+- **Barra de status** no rodapé: **Jogo** (verde = em foco, amarelo = aberto atrás de outra janela), **Driver**, módulos rodando, timer e a última mensagem do console
 - Troca rápida de **perfil**, **modo compacto** (janelinha por cima do jogo) e **timer** (desliga tudo em X tempo ou num horário)
 - Aviso quando sai uma **versão nova** no GitHub (precisa publicar um Release com tag tipo `v1.2.0` e mudar `VERSION` em `src/main.py`)
 
@@ -32,7 +33,7 @@ Janela para ligar e desligar o bot sem usar o terminal.
 - **Captura**: escolha os pokémons clicando nas fotos, 🔔 para só avisar quando aparecer; **+ Adicionar pokémon** (de um arquivo ou recortando direto da tela); **Testar detecção** mostra um print com o que foi achado e a nota de cada imagem
 - **Rota**: arraste para mudar a ordem, ligue/desligue pontos, tempo de caminhada por ponto, **+ Adicionar ponto** recortando do minimapa; **Testar minimapa**
 - **Estatísticas**: números da sessão, gráficos dos últimos 14 dias e pokébolas por pokémon (salvo em `estatisticas.db`)
-- **Ajustes**: perfis, coordenadas com **Marcar/Pegar** (posicione o mouse no jogo e aperte **F8**), cura, segurança, atalhos, batalha e título da janela
+- **Ajustes**: grupos que abrem e fecham, com um resumo no título (perfis, coordenadas com **Marcar/Pegar** — posicione o mouse no jogo e aperte **F8** —, cura, segurança, atalhos, batalha e geral); em **Geral** dá para trocar a **cor do painel** (roxo, verde veneno ou azul)
 
 ## Arquivos que o painel cria
 

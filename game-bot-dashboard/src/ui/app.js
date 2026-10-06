@@ -89,7 +89,7 @@ function buildModules(modules) {
   for (const [name, label] of Object.entries(modules)) {
     const node = tpl.content.firstElementChild.cloneNode(true);
     $(".m-name", node).textContent = label;
-    $(".m-desc", node).textContent = DESCRIPTIONS[name] || "";
+    node.title = DESCRIPTIONS[name] || "";
     const input = $("input", node);
     input.setAttribute("aria-label", `Ligar ${label}`);
     input.addEventListener("change", async () => {
@@ -97,7 +97,7 @@ function buildModules(modules) {
       if (input.checked && !ok) input.checked = false;
     });
     $("#modules").append(node);
-    moduleEls[name] = { node, input, label, text: $(".m-text", node), key: $(".m-key", node) };
+    moduleEls[name] = { node, input, label, text: $(".m-text", node), key: $(".m-key", node), time: $(".m-time", node) };
   }
 
   // filtros do console e campos de atalho seguem a lista de módulos
@@ -135,6 +135,10 @@ function appendLogs(logs) {
     box.append(row);
   }
   while (box.childElementCount > 800) box.firstElementChild.remove();
+  const last = logs[logs.length - 1];
+  const sb = $("#sb-last");
+  sb.className = `sb-last full-only ${last.level}`;
+  sb.textContent = `${last.time}  ${last.module ? `[${moduleEls[last.module]?.label || last.module}] ` : ""}${last.msg}`;
   applyLogFilter();
   if (stick) box.scrollTop = box.scrollHeight;
 }
@@ -158,15 +162,20 @@ async function poll() {
       m.node.classList.toggle("running", running);
       if (document.activeElement !== m.input) m.input.checked = running;
       m.text.textContent = running ? s.status[name] : "Parado";
+      m.time.textContent = running && s.uptime?.[name] != null ? fmtDuration(s.uptime[name]) : "";
     }
     const pill = $("#status-pill");
     pill.classList.toggle("on", count > 0);
     pill.textContent = count === 0 ? "Parado" : count === 1 ? "1 rodando" : `${count} rodando`;
+    const names = Object.entries(moduleEls).filter(([n]) => s.running[n]).map(([, m]) => m.label);
+    const sbRun = $("#sb-running");
+    sbRun.classList.toggle("on", count > 0);
+    sbRun.textContent = count ? `Rodando: ${names.join(", ")}` : "Nada rodando";
 
     const game = $("#h-game");
     game.classList.toggle("ok", s.health.game && s.health.focused);
     game.classList.toggle("warn", s.health.game && !s.health.focused);
-    game.textContent = s.health.game && !s.health.focused ? "Jogo (fora de foco)" : "Jogo";
+    game.textContent = !s.health.game ? "Jogo fechado" : s.health.focused ? "Jogo em foco" : "Jogo fora de foco";
     game.title = !s.health.game
       ? `Janela "${config.window_title}" não encontrada`
       : s.health.focused
@@ -175,6 +184,7 @@ async function poll() {
     const drv = $("#h-driver");
     drv.classList.toggle("ok", s.health.driver);
     drv.title = s.health.driver ? "Driver Interception OK" : "Driver Interception não encontrado";
+    drv.textContent = s.health.driver ? "Driver OK" : "Driver ausente";
 
     renderTimer(s.timer);
     handlePick(s.pick);
@@ -189,6 +199,8 @@ async function poll() {
 function renderTimer(left) {
   const out = $("#timer-left");
   out.textContent = left == null ? "" : fmtDuration(left);
+  $("#sb-timer").hidden = left == null;
+  $("#sb-timer").textContent = left == null ? "" : `Timer: ${fmtDuration(left)}`;
   $("#timer-desc").textContent = left == null ? "Desliga tudo sozinho." : "Desliga tudo em";
   if (left == null && !timerEditing && $("#timer-select").value && $("#timer-select").value !== "at") {
     $("#timer-select").value = "";
@@ -324,6 +336,48 @@ function fillForm() {
   }
   updateSwatches();
   renderWindowRef();
+  applyTheme(config.theme);
+  renderGroupSummaries();
+}
+
+function applyTheme(theme) {
+  document.body.dataset.theme = ["roxo", "verde", "azul"].includes(theme) ? theme : "roxo";
+}
+
+// Resumo que aparece no título de cada grupo de Ajustes, para não precisar abrir.
+function renderGroupSummaries() {
+  const c = config;
+  const keys = Object.entries(c.hotkeys || {}).filter(([, k]) => k).map(([n, k]) => `${moduleEls[n]?.label || n} ${k}`);
+  const sums = {
+    profiles: c.profile ? `Perfil atual: ${c.profile}` : "Nenhum perfil carregado",
+    coords: `Minimapa ${c.cavebot.map_region.join(", ")} · vida do inimigo ${c.cavebot.hp_pixel.join(", ")}`,
+    heal: c.heal.pixel?.length === 2 ? `Tecla ${String(c.heal.key).toUpperCase()} · pixel ${c.heal.pixel.join(", ")}` : "Não configurada",
+    safety: `Luta até ${c.safety.fight_timeout || "∞"}s · tolerância ${c.safety.color_tolerance ?? 30}${c.safety.pause_unfocused ? " · pausa fora de foco" : ""}`,
+    hotkeys: `Parar tudo ${c.stop_hotkey}${keys.length ? " · " + keys.join(", ") : ""}`,
+    battle: `Teclas ${c.battle.attack_keys.join(", ")} · a cada ${c.battle.interval}s`,
+    general: c.window_title,
+  };
+  for (const [k, v] of Object.entries(sums)) {
+    const span = $(`[data-sum="${k}"]`);
+    if (span) span.textContent = v;
+  }
+}
+
+// Lembra quais grupos de Ajustes ficaram abertos.
+function wireGroups() {
+  let open = [];
+  try {
+    open = JSON.parse(localStorage.getItem("groups-open") || "[]");
+  } catch {}
+  for (const d of $$("details.group")) {
+    d.open = open.includes(d.dataset.group);
+    d.addEventListener("toggle", () => {
+      const now = $$("details.group").filter((g) => g.open).map((g) => g.dataset.group);
+      try {
+        localStorage.setItem("groups-open", JSON.stringify(now));
+      } catch {}
+    });
+  }
 }
 
 function applyConfig() {
@@ -361,6 +415,8 @@ function validate() {
     if (nums.length !== want || nums.some(Number.isNaN)) {
       toast(`Preencha ${want} números separados por vírgula`, true);
       $$(".tab").find((t) => t.dataset.tab === "settings").click();
+      const group = input.closest("details");
+      if (group) group.open = true;
       input.focus();
       return false;
     }
@@ -694,13 +750,14 @@ function niceMax(v) {
 }
 
 // Barras de uma série só, eixo único começando no zero, dica ao passar o mouse.
-function barChart(box, data, { value, format, label }) {
+function barChart(box, data, { value, format, label, integer = false }) {
   const W = box.clientWidth || 360;
   const H = box.clientHeight || 150;
   const pad = { l: 34, r: 4, t: 8, b: 20 };
   const iw = W - pad.l - pad.r;
   const ih = H - pad.t - pad.b;
-  const max = niceMax(Math.max(...data.map(value)));
+  // contagens: no mínimo 2 para a linha do meio não cair em 0,5 (aparecia "1, 1, 0")
+  const max = niceMax(Math.max(integer ? 2 : 0, ...data.map(value)));
   const step = iw / data.length;
   const bw = Math.max(4, Math.min(22, step - 4));
 
@@ -766,12 +823,13 @@ async function refreshStats() {
   $("#k-total").textContent = totalBalls;
 
   const ballsBox = $("#chart-balls");
-  barChart(ballsBox, s.daily, { value: (d) => d.balls, format: (v) => String(Math.round(v)), label: dayLabel });
+  barChart(ballsBox, s.daily, { value: (d) => d.balls, format: (v) => String(Math.round(v)), label: dayLabel, integer: true });
   ballsBox.setAttribute("aria-label", "Pokébolas por dia: " + s.daily.map((d) => `${dayLabel(d)} ${d.balls}`).join(", "));
   const timeBox = $("#chart-time");
   barChart(timeBox, s.daily, {
     value: (d) => d.seconds / 3600,
-    format: (v, axis) => (axis ? `${+v.toFixed(1)}h` : fmtDuration(v * 3600)),
+    // eixo em minutos abaixo de 1h (antes 0,25h virava "0.3h")
+    format: (v, axis) => (axis ? (v < 1 ? `${Math.round(v * 60)}min` : `${+v.toFixed(1)}h`) : fmtDuration(v * 3600)),
     label: dayLabel,
   });
   timeBox.setAttribute("aria-label", "Tempo ligado por dia: " + s.daily.map((d) => `${dayLabel(d)} ${fmtDuration(d.seconds)}`).join(", "));
@@ -846,6 +904,8 @@ function wireUi() {
   }
 
   $$(".save").forEach((b) => b.addEventListener("click", () => save()));
+  $("#theme-select").addEventListener("change", (e) => applyTheme(e.target.value));
+  wireGroups();
   $("#stop-all").addEventListener("click", () => api.stop_all());
   $("#clear-logs").addEventListener("click", () => $("#log").replaceChildren());
   $("#open-logs").addEventListener("click", () => call("open_logs_folder"));

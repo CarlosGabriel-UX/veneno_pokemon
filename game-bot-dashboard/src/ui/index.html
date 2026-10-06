@@ -15,10 +15,6 @@
       </svg>
       <div class="brand-text">
         <h1>Veneno <span>do Pokémon</span></h1>
-        <div class="health">
-          <span id="h-game" class="hdot">Jogo</span>
-          <span id="h-driver" class="hdot">Driver</span>
-        </div>
       </div>
     </div>
 
@@ -188,80 +184,118 @@
 
       <!-- Ajustes -->
       <div class="tab-body" id="tab-settings">
-        <h3 class="sub-title">Perfis</h3>
-        <p class="hint">Um perfil guarda todas as configurações (pokémons, rota, coordenadas). Use um por hunt.</p>
-        <div class="row-gap wrap">
-          <input id="profile-name" class="input" type="text" placeholder="Nome do perfil (ex.: Croa na praia)" aria-label="Nome do perfil">
-          <button id="profile-save" class="btn">Salvar como perfil</button>
-          <button id="profile-delete" class="btn ghost">Excluir perfil atual</button>
-        </div>
-
-        <h3 class="sub-title">Coordenadas</h3>
-        <p class="hint">Use os botões para marcar no jogo: posicione o mouse e aperte <kbd class="k" data-pickkey>F8</kbd>. Para uma área, marque o canto de cima à esquerda e depois o de baixo à direita.</p>
-        <div class="callout" id="ref-box">
-          <span id="ref-text">Coordenadas acompanham a janela do jogo.</span>
-          <button id="ref-set" class="btn small" title="Use se as coordenadas estão certas para a posição atual da janela">Usar posição atual como referência</button>
-        </div>
-        <div class="fields">
-          <label>Área do minimapa <small>x, y, largura, altura</small>
-            <span class="with-btn"><input data-path="cavebot.map_region" data-type="numlist" data-len="4" type="text"><button class="btn small" data-pick="region" data-target="cavebot.map_region">Marcar</button></span>
-          </label>
-          <label>Área de captura <small>x, y, largura, altura</small>
-            <span class="with-btn"><input data-path="capture.region" data-type="numlist" data-len="4" type="text"><button class="btn small" data-pick="region" data-target="capture.region">Marcar</button></span>
-          </label>
-          <label>Pixel da vida do inimigo <small>x, y</small>
-            <span class="with-btn"><input data-path="cavebot.hp_pixel" data-type="numlist" data-len="2" type="text"><button class="btn small" data-pick="point" data-target="cavebot.hp_pixel">Pegar</button></span>
-          </label>
-          <label>Cor da vida do inimigo <small>R, G, B</small>
-            <span class="with-btn"><input data-path="cavebot.hp_color" data-type="numlist" data-len="3" type="text"><span class="swatch" data-swatch="cavebot.hp_color"></span></span>
-          </label>
-        </div>
-
-        <h3 class="sub-title">Cura</h3>
-        <p class="hint">Pegue um pixel da barra de vida do <b>seu</b> pokémon, no ponto onde quer curar (ex.: no meio da barra), com a vida cheia. Quando a cor ali mudar, o bot aperta a tecla.</p>
-        <div class="fields">
-          <label>Pixel da sua vida <small>x, y</small>
-            <span class="with-btn"><input data-path="heal.pixel" data-type="numlist" data-len="2" data-optional type="text" placeholder="não configurado"><button class="btn small" data-pick="point" data-target="heal.pixel">Pegar</button></span>
-          </label>
-          <label>Cor com vida cheia <small>R, G, B</small>
-            <span class="with-btn"><input data-path="heal.color" data-type="numlist" data-len="3" data-optional type="text"><span class="swatch" data-swatch="heal.color"></span></span>
-          </label>
-          <label>Tecla de cura <small>ex.: f1, 2</small> <input data-path="heal.key" type="text" maxlength="4"></label>
-          <label>Espera entre curas (s) <input data-path="heal.cooldown" type="number" step="0.5" min="0.5"></label>
-        </div>
-
-        <h3 class="sub-title">Segurança</h3>
-        <div class="fields">
-          <label class="check wide"><input data-path="safety.pause_unfocused" type="checkbox"> Pausar quando o jogo não estiver em primeiro plano <small>evita clicar em outras janelas</small></label>
-          <label>Tempo máximo de luta (s) <small>0 = sem limite</small> <input data-path="safety.fight_timeout" type="number" step="5" min="0"></label>
-          <label>Voltas sem achar ponto até parar <small>0 = nunca parar</small> <input data-path="safety.max_misses" type="number" step="1" min="0"></label>
-          <label>Tolerância de cor <small>quanto R, G e B podem variar na vida do inimigo e na sua</small> <input data-path="safety.color_tolerance" type="number" step="5" min="0" max="255"></label>
-          <label class="check wide"><input data-path="alerts.sound" type="checkbox"> Tocar som e piscar o painel em alertas <small>erro, travamento, jogo fechado, timer, pokémon com 🔔</small></label>
-        </div>
-
-        <h3 class="sub-title">Atalhos</h3>
-        <p class="hint">Ligam e desligam cada módulo direto do jogo. <kbd class="k" data-pickkey>F8</kbd> é reservado para marcar coordenadas.</p>
-        <div class="fields" id="hotkey-fields">
-          <label>Parar tudo <select data-path="stop_hotkey" class="hk"></select></label>
-        </div>
-
-        <h3 class="sub-title">Batalha</h3>
-        <div class="fields">
-          <label>Teclas de ataque <small>separadas por vírgula</small> <input data-path="battle.attack_keys" data-type="list" type="text"></label>
-          <label>Intervalo (s) <input data-path="battle.interval" type="number" step="0.1" min="0.1"></label>
-          <label>Precisão (0–1) <input data-path="battle.confidence" type="number" step="0.05" min="0.3" max="1"></label>
-          <label>&nbsp;<button class="btn" data-test="battle">Testar batalha e pixel de vida</button></label>
-        </div>
-
-        <h3 class="sub-title">Geral</h3>
-        <div class="fields">
-          <label class="wide">Título da janela do jogo <input data-path="window_title" type="text"></label>
-        </div>
+        <details class="group" data-group="profiles">
+          <summary><span class="g-title">Perfis</span><span class="g-sum" data-sum="profiles"></span></summary>
+          <div class="g-body">
+          <p class="hint">Um perfil guarda todas as configurações (pokémons, rota, coordenadas). Use um por hunt.</p>
+          <div class="row-gap wrap">
+            <input id="profile-name" class="input" type="text" placeholder="Nome do perfil (ex.: Croa na praia)" aria-label="Nome do perfil">
+            <button id="profile-save" class="btn">Salvar como perfil</button>
+            <button id="profile-delete" class="btn ghost">Excluir perfil atual</button>
+          </div>
+          </div>
+        </details>
+        <details class="group" data-group="coords">
+          <summary><span class="g-title">Coordenadas</span><span class="g-sum" data-sum="coords"></span></summary>
+          <div class="g-body">
+          <p class="hint">Use os botões para marcar no jogo: posicione o mouse e aperte <kbd class="k" data-pickkey>F8</kbd>. Para uma área, marque o canto de cima à esquerda e depois o de baixo à direita.</p>
+          <div class="callout" id="ref-box">
+            <span id="ref-text">Coordenadas acompanham a janela do jogo.</span>
+            <button id="ref-set" class="btn small" title="Use se as coordenadas estão certas para a posição atual da janela">Usar posição atual como referência</button>
+          </div>
+          <div class="fields">
+            <label>Área do minimapa <small>x, y, largura, altura</small>
+              <span class="with-btn"><input data-path="cavebot.map_region" data-type="numlist" data-len="4" type="text"><button class="btn small" data-pick="region" data-target="cavebot.map_region">Marcar</button></span>
+            </label>
+            <label>Área de captura <small>x, y, largura, altura</small>
+              <span class="with-btn"><input data-path="capture.region" data-type="numlist" data-len="4" type="text"><button class="btn small" data-pick="region" data-target="capture.region">Marcar</button></span>
+            </label>
+            <label>Pixel da vida do inimigo <small>x, y</small>
+              <span class="with-btn"><input data-path="cavebot.hp_pixel" data-type="numlist" data-len="2" type="text"><button class="btn small" data-pick="point" data-target="cavebot.hp_pixel">Pegar</button></span>
+            </label>
+            <label>Cor da vida do inimigo <small>R, G, B</small>
+              <span class="with-btn"><input data-path="cavebot.hp_color" data-type="numlist" data-len="3" type="text"><span class="swatch" data-swatch="cavebot.hp_color"></span></span>
+            </label>
+          </div>
+          </div>
+        </details>
+        <details class="group" data-group="heal">
+          <summary><span class="g-title">Cura</span><span class="g-sum" data-sum="heal"></span></summary>
+          <div class="g-body">
+          <p class="hint">Pegue um pixel da barra de vida do <b>seu</b> pokémon, no ponto onde quer curar (ex.: no meio da barra), com a vida cheia. Quando a cor ali mudar, o bot aperta a tecla.</p>
+          <div class="fields">
+            <label>Pixel da sua vida <small>x, y</small>
+              <span class="with-btn"><input data-path="heal.pixel" data-type="numlist" data-len="2" data-optional type="text" placeholder="não configurado"><button class="btn small" data-pick="point" data-target="heal.pixel">Pegar</button></span>
+            </label>
+            <label>Cor com vida cheia <small>R, G, B</small>
+              <span class="with-btn"><input data-path="heal.color" data-type="numlist" data-len="3" data-optional type="text"><span class="swatch" data-swatch="heal.color"></span></span>
+            </label>
+            <label>Tecla de cura <small>ex.: f1, 2</small> <input data-path="heal.key" type="text" maxlength="4"></label>
+            <label>Espera entre curas (s) <input data-path="heal.cooldown" type="number" step="0.5" min="0.5"></label>
+          </div>
+          </div>
+        </details>
+        <details class="group" data-group="safety">
+          <summary><span class="g-title">Segurança</span><span class="g-sum" data-sum="safety"></span></summary>
+          <div class="g-body">
+          <div class="fields">
+            <label class="check wide"><input data-path="safety.pause_unfocused" type="checkbox"> Pausar quando o jogo não estiver em primeiro plano <small>evita clicar em outras janelas</small></label>
+            <label>Tempo máximo de luta (s) <small>0 = sem limite</small> <input data-path="safety.fight_timeout" type="number" step="5" min="0"></label>
+            <label>Voltas sem achar ponto até parar <small>0 = nunca parar</small> <input data-path="safety.max_misses" type="number" step="1" min="0"></label>
+            <label>Tolerância de cor <small>quanto R, G e B podem variar na vida do inimigo e na sua</small> <input data-path="safety.color_tolerance" type="number" step="5" min="0" max="255"></label>
+            <label class="check wide"><input data-path="alerts.sound" type="checkbox"> Tocar som e piscar o painel em alertas <small>erro, travamento, jogo fechado, timer, pokémon com 🔔</small></label>
+          </div>
+          </div>
+        </details>
+        <details class="group" data-group="hotkeys">
+          <summary><span class="g-title">Atalhos</span><span class="g-sum" data-sum="hotkeys"></span></summary>
+          <div class="g-body">
+          <p class="hint">Ligam e desligam cada módulo direto do jogo. <kbd class="k" data-pickkey>F8</kbd> é reservado para marcar coordenadas.</p>
+          <div class="fields" id="hotkey-fields">
+            <label>Parar tudo <select data-path="stop_hotkey" class="hk"></select></label>
+          </div>
+          </div>
+        </details>
+        <details class="group" data-group="battle">
+          <summary><span class="g-title">Batalha</span><span class="g-sum" data-sum="battle"></span></summary>
+          <div class="g-body">
+          <div class="fields">
+            <label>Teclas de ataque <small>separadas por vírgula</small> <input data-path="battle.attack_keys" data-type="list" type="text"></label>
+            <label>Intervalo (s) <input data-path="battle.interval" type="number" step="0.1" min="0.1"></label>
+            <label>Precisão (0–1) <input data-path="battle.confidence" type="number" step="0.05" min="0.3" max="1"></label>
+            <label>&nbsp;<button class="btn" data-test="battle">Testar batalha e pixel de vida</button></label>
+          </div>
+          </div>
+        </details>
+        <details class="group" data-group="general">
+          <summary><span class="g-title">Geral</span><span class="g-sum" data-sum="general"></span></summary>
+          <div class="g-body">
+          <div class="fields">
+            <label class="wide">Título da janela do jogo <input data-path="window_title" type="text"></label>
+            <label>Cor do painel
+              <select data-path="theme" id="theme-select">
+                <option value="roxo">Roxo</option>
+                <option value="verde">Verde veneno</option>
+                <option value="azul">Azul</option>
+              </select>
+            </label>
+          </div>
+        
+          </div>
+        </details>
         <button class="btn primary save">Salvar</button>
         <p class="version muted" id="version"></p>
       </div>
     </section>
   </main>
+
+  <footer class="statusbar">
+    <span id="h-game" class="hdot">Jogo</span>
+    <span id="h-driver" class="hdot">Driver</span>
+    <span id="sb-running" class="sb-item">Nada rodando</span>
+    <span id="sb-timer" class="sb-item" hidden></span>
+    <span id="sb-last" class="sb-last full-only" title="Última mensagem do console"></span>
+  </footer>
 
   <!-- Modal genérico -->
   <div id="modal" class="modal" hidden>
@@ -278,14 +312,14 @@
 
   <template id="module-tpl">
     <section class="card module">
-      <div class="card-head">
-        <div>
-          <h3 class="m-name"></h3>
-          <p class="desc m-desc"></p>
-        </div>
+      <div class="m-row">
+        <span class="dot"></span>
+        <h3 class="m-name"></h3>
+        <kbd class="m-key" hidden></kbd>
+        <output class="m-time mono"></output>
         <label class="switch"><input type="checkbox"><span></span></label>
       </div>
-      <div class="m-status mono"><span class="dot"></span><span class="m-text">Parado</span><kbd class="m-key" hidden></kbd></div>
+      <div class="m-status"><span class="m-text">Parado</span></div>
     </section>
   </template>
 

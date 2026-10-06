@@ -86,6 +86,7 @@ DEFAULT_CONFIG = {
     "window_title": "otPokemon | Lisalon | South America",
     "window_ref": None,  # canto da janela do jogo quando as coordenadas foram marcadas
     "stop_hotkey": "F12",
+    "theme": "roxo",  # cor principal do painel: roxo, verde ou azul
 }
 
 PICK_HOTKEY = "F8"
@@ -390,6 +391,8 @@ class BotEngine:
             "logs": logs,
             "pick": None,
             "timer": max(0, self._deadline - time.time()) if self._deadline else None,
+            # há quanto tempo cada módulo ligado está rodando
+            "uptime": {n: time.time() - t for n, t in dict(self.stats.started).items()},
         }
         pick = self._pick
         if pick:
