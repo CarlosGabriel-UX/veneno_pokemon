@@ -2,7 +2,10 @@
 rem Gera dist\VenenoBot\VenenoBot.exe (abre direto na janela, sem terminal)
 cd /d "%~dp0"
 
+rem O pacote "interception" (outro projeto) sobrescreve arquivos do interception-python e quebra os cliques
+python -m pip uninstall -y interception >nul 2>&1
 python -m pip install -r requirements.txt pyinstaller || goto :erro
+python -m pip install --force-reinstall --no-deps interception-python==1.13.6 || goto :erro
 
 python -m PyInstaller --noconfirm --clean --windowed --name VenenoBot --icon assets\icon.ico ^
   --add-data "src\ui;ui" ^

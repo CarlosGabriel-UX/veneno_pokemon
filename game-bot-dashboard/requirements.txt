@@ -2,6 +2,6 @@ pywebview
 pyautogui
 opencv-python
 pillow
-interception-python
+interception-python==1.13.6
 pywin32
 pygetwindow

@@ -35,6 +35,12 @@ except Exception as e:  # pragma: no cover
     ic_inputs = None
     IC_ERROR = str(e)
 
+# O pacote "interception" (bindings cffi, outro projeto) instala na mesma pasta do
+# "interception-python" e o _utils.pyd dele sombreia o _utils.py: teclado funciona,
+# mas qualquer clique com coordenada quebra com "has no attribute 'to_interception_coordinate'".
+IC_CONFLICT = bool(ic_inputs and not hasattr(getattr(ic_inputs, "_utils", None), "to_interception_coordinate"))
+IC_FIX_CMD = "pip uninstall -y interception interception-python && pip install interception-python==1.13.6"
+
 
 PANEL_TITLE = "Veneno do Pokémon"
 
@@ -281,6 +287,9 @@ class BotEngine:
             self.log(f"pyautogui não carregou: {PG_ERROR}", "error")
         if ic is None:
             self.log(f"interception não carregou: {IC_ERROR}", "error")
+        elif IC_CONFLICT:
+            self.log("Tem outro pacote 'interception' instalado por cima do interception-python. "
+                     f"Os cliques vão funcionar, mas para corrigir de vez rode: {IC_FIX_CMD}", "warn")
         self.log("Painel pronto.", "success")
 
     # ---------- config ----------
@@ -847,6 +856,17 @@ class BotEngine:
     def _battle_empty(self):
         return bool(self._locate("battle/batalha_vazia.png", self.config["battle"]["confidence"]))
 
+    def _click(self, x, y):
+        """Move o mouse e clica pelo driver. Não usa ic.click(x, y), que depende do
+        _utils interno do interception e quebra quando há outro pacote por cima."""
+        pg.moveTo(x, y)
+        time.sleep(0.15)
+        ic.click()
+
+    def _ball_key(self):
+        key = str(self.config["capture"].get("key") or "").strip().lower()
+        return key or "1"
+
     def _attack(self):
         for key in self.config["battle"]["attack_keys"]:
             ic.press(key)
@@ -866,8 +886,9 @@ class BotEngine:
                 self.alert(f"{poke} apareceu na tela!", "success", module)
             if name in c["targets"]:
                 self.log(f"{poke} encontrado, jogando pokébola.", "success", module)
-                ic.press(c["key"])
-                ic.click(x=pos.x, y=pos.y)
+                ic.press(self._ball_key())
+                time.sleep(0.1)
+                self._click(pos.x, pos.y)
                 self.stats.ball(poke, module)
                 caught = True
         return caught
@@ -924,7 +945,7 @@ class BotEngine:
                 found_any = True
                 self.log(f"Indo para o ponto {Path(wp).stem}.", "info", "cavebot")
                 prev = pg.position()
-                ic.click(x=pos.x, y=pos.y)
+                self._click(pos.x, pos.y)
                 if stop.wait(walk_time):
                     return
                 pg.moveTo(prev)
