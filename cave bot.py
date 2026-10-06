@@ -1,7 +1,10 @@
 #import para controlar o pc
+import time
+
 import pyautogui as pg
 import interception as ic
-from threading import Thread
+
+import config_bot
 
 
 #O FAILSAFE do PyAutoGUI não interrompe os cliques enviados pelo Interception.
@@ -10,117 +13,106 @@ pg.FAILSAFE = True
 #função para evitar crash do programa caso o ícone não seja encontrado
 pg.useImageNotFoundException(False)
 
-regiao_mapa = (1730, 57, 182, 270) #coordenadas da região do mapa na tela
+#coordenadas vêm do config.json (o mesmo do painel); sem ele, valem os padrões de 1920x1080
+config = config_bot.carregar()
+cfg_batalha = config["battle"]
+cfg_captura = config["capture"]
+cfg_cave = config["cavebot"]
 
-tela = (3, 28, 1910, 993)
+regiao_mapa = tuple(cfg_cave["map_region"]) #região do mapa na tela
+tela = tuple(cfg_captura["region"])
+pixel_vida = tuple(cfg_cave["hp_pixel"]) #pixel da barra de vida do inimigo na battle
+cor_vida = tuple(cfg_cave["hp_color"])
+tempo_max_luta = config["safety"]["fight_timeout"]
 
-#dicionario para associar icone ao tempo de chegada até ele
+#lista de (ícone do mapa, segundos para chegar até ele)
+icones = config_bot.rota(config)
 
-icones = {
-    "imags/map/1.png": 9,
-    "imags/map/2.png": 9,
-    "imags/map/3.png": 9,
-    "imags/map/4.png": 9,
-    "imags/map/5.png": 9,
-    "imags/map/6.png": 9,
-    "imags/map/7.png": 9,
-    "imags/map/8.png": 9,
-    "imags/map/9.png": 9,
-    "imags/map/10.png": 9,
-    "imags/map/11.png": 9,
-}
+pokemon = [config_bot.imagem("captura", nome) for nome in cfg_captura["targets"]]
 
-pokemon = {
+batalha_vazia = config_bot.imagem("battle", "batalha_vazia.png")
 
-    "imags/captura/croa.png": 2,
-    "imags/captura/croa_2.png": 2,
-}
-#x: 1748, y: 286 RGB: (255,0,0)  #verifica a cor do pixel para saber se tem inimigos na batalha
+
+def atacar():
+    for tecla in cfg_batalha["attack_keys"]:
+        ic.press(tecla)
+
 
 def aguardar_monstro_morrer():
-    while True:
-        rgb_atual = pg.pixel(1748, 286)
+    inicio = time.time()
+    while pg.pixel(*pixel_vida) == cor_vida:
+        if time.time() - inicio > tempo_max_luta:
+            print("luta passou do tempo limite, seguindo a rota...")
+            return False
 
-        if rgb_atual != (255, 0, 0):
-            print("monstro morto, aguardando respawn...")               
-            #return  # Sai da função quando o monstro morre
-            captura()  # Chama a função de captura após o monstro morrer
-            return  # Sai da função após a captura
-        
         print("monstro vivo, aguardando morte...")
-
-        ic.press("e")
-        ic.press("q")
-
+        atacar()
         pg.sleep(1)  # Aguarda 1 segundo antes de verificar novamente
-      
+
+    print("monstro morto.")
+    return True
+
+
 def batalha():
-    while True:
-        battle_vazia = pg.locateCenterOnScreen("imags/battle/batalha_vazia.png", confidence=0.9)
-        print("Procurando inimigos na batalha...")
+    #luta até a battle ficar vazia; devolve True se matou algum monstro
+    matou = False
+    while not pg.locateCenterOnScreen(batalha_vazia, confidence=cfg_batalha["confidence"]):
+        print("Inimigos detectados na batalha. Iniciando ataque...")
+        atacar()
+        pg.sleep(cfg_batalha["interval"])
 
-        if battle_vazia:
-            print("Sem inimigos na batalha.")
-            pg.sleep(0.5)  # Aguarda 0.5 segundo antes de verificar novamente
-            return  # Continua o loop para verificar novamente
+        if not aguardar_monstro_morrer():
+            break
+        matou = True
 
-        else:
-            print("Inimigos detectados na batalha. Iniciando ataque...")
-            ic.press("e")
-            ic.press("q")
+    print("Sem inimigos na batalha.")
+    return matou
 
-            pg.sleep(0.5)
-
-            aguardar_monstro_morrer()  # Chama a função para aguardar o monstro morrer
-            captura()  # Chama a função de captura após o monstro morrer
-
-def movimentação():
-#repete a rota indefinidamente
-    while True:
-        for caminho_icone, segundos in icones.items():
-            print("Procurando o ícone:", {caminho_icone})
-
-            posicao = pg.locateCenterOnScreen(caminho_icone, region=regiao_mapa, confidence=0.8) #localize o centro desta imagem na tela
-
-            if posicao:
-                print("indo para o icone")
-
-                posicao_atual = pg.position()
-
-                ic.click(x=posicao.x, y=posicao.y)
-                pg.sleep(segundos)
-
-                pg.moveTo(posicao_atual)
-
-                batalha()  # Chama a função de batalha após chegar ao ícone
-
-            else:
-                print("Ícone não encontrado")
 
 def captura():
-    while True:
-        for caminho_pokemon, segundos in pokemon.items():
-            print("Procurando Pokémon para capturar...")
-            captura = pg.locateCenterOnScreen(caminho_pokemon,region=tela, confidence=0.75)
-            if captura:
+    #clica nos corpos até não sobrar nenhum Pokémon da lista na tela
+    for _ in range(10):  # limite para não travar se a imagem continuar aparecendo
+        encontrou = False
+        for caminho_pokemon in pokemon:
+            posicao = pg.locateCenterOnScreen(caminho_pokemon, region=tela, confidence=cfg_captura["confidence"])
+            if posicao:
                 print("Pokemon encontrado, iniciando captura...")
-                ic.press("1")
-                ic.click(x=captura.x, y=captura.y)
-                pg.sleep(0.5)  # Aguarda 0.5 segundo antes de verificar novamente
+                ic.press(cfg_captura["key"])
+                ic.click(x=posicao.x, y=posicao.y)
+                pg.sleep(cfg_captura["interval"])
+                encontrou = True
 
-        else:
+        if not encontrou:
             print("Nenhum Pokémon encontrado para capturar.")
-            pg.sleep(0.5)  # Aguarda 0.5 segundo antes de verificar novamente
+            return
 
-            return  # Sai da função quando não há Pokémon para capturar
-        
+
+def movimentação():
+#repete a rota indefinidamente: anda até o ícone, luta, captura e vai para o próximo
+    if not icones:
+        print("Nenhum ícone de rota encontrado em imags/map.")
+        return
+
+    while True:
+        for caminho_icone, segundos in icones:
+            print("Procurando o ícone:", caminho_icone)
+
+            posicao = pg.locateCenterOnScreen(caminho_icone, region=regiao_mapa, confidence=cfg_cave["confidence"]) #localize o centro desta imagem na tela
+
+            if not posicao:
+                print("Ícone não encontrado")
+                continue
+
+            print("indo para o icone")
+            posicao_atual = pg.position()
+            ic.click(x=posicao.x, y=posicao.y)
+            pg.sleep(segundos)
+            pg.moveTo(posicao_atual)
+
+            if batalha():
+                captura()
+
 
 ic.auto_capture_devices(keyboard=True, mouse=True, verbose=True)
 
-captura_thread = Thread(target=captura)
-captura_thread.start()
-
-#captura()
-#batalha()
 movimentação()
-

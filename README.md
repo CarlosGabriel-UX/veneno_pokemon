@@ -71,19 +71,22 @@ Dê dois cliques em `game-bot-dashboard\build.bat`. Ele instala o que falta, ger
 
 ### Scripts originais (opcional)
 
-Os scripts da raiz fazem uma coisa cada e não têm painel. Instale as dependências e rode **sempre a partir da raiz do projeto**, porque eles procuram as imagens em `imags/`:
+Os scripts da raiz fazem uma coisa cada e não têm painel. Instale as dependências e rode a partir da raiz do projeto:
 
 ```
-pip install pyautogui opencv-python pillow interception-python pywin32 pygetwindow
+pip install -r requirements.txt
 python battle.py
 python captura.py
 python "cave bot.py"
 python opacity.py 200
 ```
 
-- As coordenadas da tela (`tela`, `regiao_mapa`) estão fixas no código para um monitor 1920x1080; ajuste no começo de cada script se a sua tela for diferente.
+- O `cave bot.py` faz um ciclo só: anda até o próximo ícone do mapa, luta até a battle ficar vazia, captura os corpos e segue a rota.
+- As coordenadas, teclas, Pokémon-alvo e a rota vêm do `config.json` que o painel salva na raiz do projeto. Marque tudo uma vez em **Ajustes** no painel e os scripts passam a usar os mesmos valores. Sem `config.json`, valem os padrões de um monitor 1920x1080 (em `config_bot.py`).
+- Os scripts usam as coordenadas como foram marcadas, então não mova a janela do jogo depois de marcar.
+- O `memory_bank.py` guarda estado, capturas e estatísticas em `memory_bank.db`, na raiz.
 - Para parar um script, feche o terminal ou aperte `Ctrl+C`.
-- O `requirements.txt` da raiz também instala `torch`, `torchvision` e `scipy`, que só o `teste captcha.py` usa. São pacotes grandes; só instale com `pip install -r requirements.txt` se for usar esse teste.
+- O `teste captcha.py` precisa de `torch`, `torchvision` e `scipy`, que são pacotes grandes. Só instale com `pip install -r requirements-captcha.txt` se for usar esse teste.
 
 ### Problemas comuns
 

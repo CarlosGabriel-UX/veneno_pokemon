@@ -1,0 +1,5 @@
+# Só para o "teste captcha.py" (pacotes grandes)
+-r requirements.txt
+torch
+torchvision
+scipy
