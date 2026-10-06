@@ -91,7 +91,7 @@ DEFAULT_CONFIG = {
     "stop_hotkey": "F12",
     "theme": "roxo",  # cor principal do painel: roxo, verde ou azul
     "mascot": "auto",  # auto = a garota da cor do painel; "" = nenhuma; ou um arquivo de imags/mascotes
-    "mascot_mode": "canto",  # canto = pequena na coluna da esquerda; fundo = grande e transparente atrás do painel
+    "mascot_mode": "canto",  # canto = pequena na coluna da esquerda; fundo = grande e transparente atrás do painel; tela = esticada no painel inteiro
     "mascot_opacity": 50,  # % de opacidade no modo fundo
 }
 

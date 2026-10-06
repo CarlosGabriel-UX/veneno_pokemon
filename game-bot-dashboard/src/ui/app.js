@@ -396,7 +396,8 @@ function renderMascot(choice) {
   if ($("#mascot-select").selectedIndex < 0) $("#mascot-select").value = "auto"; // imagem apagada da pasta
   choice ??= $("#mascot-select").value;
   const src = choice ? mascotSrc(choice) : null;
-  const big = $("#mascot-mode").value === "fundo";
+  const mode = $("#mascot-mode").value;
+  const big = mode === "fundo" || mode === "tela";
   const opacity = Number($("#mascot-opacity").value) || 50;
   $("#mascot").hidden = !src || big;
   $("#mascot-bg").hidden = !src || !big;
@@ -404,6 +405,7 @@ function renderMascot(choice) {
   $("#mascot-opacity-field").hidden = !big;
   $("#mascot-opacity-value").textContent = `${opacity}%`;
   $("#mascot-bg").style.opacity = opacity / 100;
+  $("#mascot-bg").classList.toggle("cover", mode === "tela");
   for (const img of [$("#mascot-img"), $("#mascot-bg-img")]) {
     if (src && img.getAttribute("src") !== src) img.src = src;
   }

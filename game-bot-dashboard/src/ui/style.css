@@ -148,6 +148,11 @@ body.busy .mascot img { animation: mascot-bob 1.6s ease-in-out infinite; }
   -webkit-mask-image: radial-gradient(ellipse 75% 85% at 60% 55%, #000 55%, transparent 100%);
   mask-image: radial-gradient(ellipse 75% 85% at 60% 55%, #000 55%, transparent 100%);
 }
+/* esticada: cobre a janela toda, cortando o que sobrar, sem esmaecer as bordas */
+.mascot-bg.cover img {
+  width: 100%; max-width: none; object-fit: cover; object-position: center 20%;
+  -webkit-mask-image: none; mask-image: none;
+}
 body.mascot-big > :is(header, main, footer, .update-banner, .pick-banner) { position: relative; z-index: 1; }
 body.mascot-big .panel, body.mascot-big .card { background-color: rgba(23, 20, 31, .72); }
 body.mascot-big .log { background-color: rgba(11, 9, 16, .6); }
