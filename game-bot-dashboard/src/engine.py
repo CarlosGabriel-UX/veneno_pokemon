@@ -90,7 +90,10 @@ DEFAULT_CONFIG = {
     "window_ref": None,  # canto da janela do jogo quando as coordenadas foram marcadas
     "stop_hotkey": "F12",
     "theme": "roxo",  # cor principal do painel: roxo, verde ou azul
+    "mascot": "auto",  # auto = a garota da cor do painel; "" = nenhuma; ou um arquivo de imags/mascotes
 }
+
+MASCOT_EXTS = (".png", ".jpg", ".jpeg", ".gif", ".webp")
 
 # recortes de mensagens do jogo: captura que deu certo e falta de pokébola
 SUCCESS_IMAGE = "captura_ok/sucesso.png"
@@ -586,6 +589,32 @@ class BotEngine:
     def map_waypoints(self):
         files = [p for p in (self.img / "map").glob("*.png") if p.stem.isdigit()]
         return [p.name for p in sorted(files, key=lambda p: int(p.stem))]
+
+    def mascot_images(self):
+        folder = self.img / "mascotes"
+        return sorted(p.name for p in folder.glob("*") if p.suffix.lower() in MASCOT_EXTS) if folder.exists() else []
+
+    def add_mascot(self, src_path):
+        """Copia uma imagem para imags/mascotes e devolve o nome dela."""
+        src = Path(src_path)
+        if src.suffix.lower() not in MASCOT_EXTS:
+            raise ValueError("Use uma imagem PNG, JPG, GIF ou WEBP.")
+        folder = self.img / "mascotes"
+        folder.mkdir(exist_ok=True)
+        base = _safe_name(src.stem)
+        dest = folder / f"{base}{src.suffix.lower()}"
+        n = 2
+        while dest.exists():
+            dest = folder / f"{base}_{n}{src.suffix.lower()}"
+            n += 1
+        shutil.copyfile(src, dest)
+        self.log(f"Mascote '{dest.stem}' adicionada.", "success")
+        return dest.name
+
+    def open_mascot_folder(self):
+        folder = self.img / "mascotes"
+        folder.mkdir(exist_ok=True)
+        os.startfile(folder)
 
     def route(self):
         c = self.config["cavebot"]

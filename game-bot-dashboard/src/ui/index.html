@@ -88,6 +88,11 @@
         </div>
         <input id="opacity" type="range" min="5" max="100" value="100" aria-label="Opacidade do jogo">
       </section>
+
+      <div id="mascot" class="mascot full-only" hidden>
+        <p id="mascot-bubble" class="bubble" hidden></p>
+        <img id="mascot-img" alt="">
+      </div>
     </aside>
 
     <section class="panel full-only">
@@ -310,6 +315,15 @@
                 <option value="verde">Verde veneno</option>
                 <option value="azul">Azul</option>
               </select>
+            </label>
+            <label>Mascote
+              <select data-path="mascot" id="mascot-select"></select>
+            </label>
+            <label class="wide">Suas imagens <small>PNG, JPG, GIF ou WEBP; ficam em imags/mascotes</small>
+              <span class="row-gap">
+                <button class="btn" id="mascot-add" type="button">Adicionar imagem…</button>
+                <button class="btn ghost" id="mascot-folder" type="button" title="Abre imags/mascotes">Abrir pasta</button>
+              </span>
             </label>
           </div>
         
