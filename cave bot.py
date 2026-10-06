@@ -13,6 +13,13 @@ pg.FAILSAFE = True
 #função para evitar crash do programa caso o ícone não seja encontrado
 pg.useImageNotFoundException(False)
 
+#move o mouse e clica pelo driver; ic.click(x, y) quebra quando o pacote "interception"
+#(outro projeto) está instalado por cima do interception-python
+def clicar(x, y):
+    pg.moveTo(x, y)
+    pg.sleep(0.15)
+    ic.click()
+
 #coordenadas vêm do config.json (o mesmo do painel); sem ele, valem os padrões de 1920x1080
 config = config_bot.carregar()
 cfg_batalha = config["battle"]
@@ -78,7 +85,7 @@ def captura():
             if posicao:
                 print("Pokemon encontrado, iniciando captura...")
                 ic.press(cfg_captura["key"])
-                ic.click(x=posicao.x, y=posicao.y)
+                clicar(posicao.x, posicao.y)
                 pg.sleep(cfg_captura["interval"])
                 encontrou = True
 
@@ -105,7 +112,7 @@ def movimentação():
 
             print("indo para o icone")
             posicao_atual = pg.position()
-            ic.click(x=posicao.x, y=posicao.y)
+            clicar(posicao.x, posicao.y)
             pg.sleep(segundos)
             pg.moveTo(posicao_atual)
 
