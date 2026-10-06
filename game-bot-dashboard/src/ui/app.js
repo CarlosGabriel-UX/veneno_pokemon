@@ -649,7 +649,7 @@ async function runTest(kind) {
       const hp = el("div", "callout");
       const sw = el("span", "swatch");
       sw.style.background = `rgb(${r.extra.rgb})`;
-      hp.append(sw, `Pixel da vida (${r.extra.hp_pixel.join(", ")}) está com RGB ${r.extra.rgb.join(", ")}: ${r.extra.matches ? "igual à cor configurada (inimigo vivo)." : "diferente da cor configurada."}`);
+      hp.append(sw, `Pixel da vida (${r.extra.hp_pixel.join(", ")}) está com RGB ${r.extra.rgb.join(", ")}: ${r.extra.matches ? "dentro da tolerância da cor configurada (inimigo vivo)." : "fora da tolerância da cor configurada."}`);
       body.append(hp);
     }
   }

@@ -77,6 +77,7 @@ DEFAULT_CONFIG = {
         "pause_unfocused": True,
         "fight_timeout": 60,
         "max_misses": 5,
+        "color_tolerance": 30,  # quanto cada canal (R, G, B) pode variar e ainda contar como a mesma cor
     },
     "alerts": {
         "sound": True,
@@ -116,6 +117,17 @@ def _migrate(cfg):
     if old and not cave.get("route"):
         cave["route"] = [{"name": n, "time": cave.get("walk_time", 9)} for n in old]
     return cfg
+
+
+def _color_close(rgb, target, tolerance):
+    """True se cada canal de rgb está a no máximo `tolerance` do canal de target."""
+    if rgb is None or not target or len(rgb) != len(target):
+        return False
+    return all(abs(int(a) - int(b)) <= tolerance for a, b in zip(rgb, target))
+
+
+# Batalha e Captura fazem o mesmo que o Cavebot já faz sozinho; rodando juntos, atacam e clicam por cima.
+CONFLICTS = {"cavebot": ("battle", "capture")}
 
 
 def _safe_name(name):
@@ -384,7 +396,7 @@ class BotEngine:
             out["pick"] = {k: pick[k] for k in ("id", "kind", "target", "points", "result", "cancelled")}
             if pg is not None and pick["result"] is None and not pick["cancelled"]:
                 x, y = pg.position()
-                out["pick"]["mouse"] = {"x": x, "y": y, "rgb": list(self._pixel(x, y))}
+                out["pick"]["mouse"] = {"x": x, "y": y, "rgb": list(self._pixel(x, y) or (0, 0, 0))}
         return out
 
     def is_running(self, name):
@@ -639,10 +651,17 @@ class BotEngine:
         return pg.Point(offset[0] + x + tw // 2, offset[1] + y + th // 2)
 
     def _pixel(self, x, y):
+        """Cor do pixel, ou None se não deu para ler (aí ninguém deve agir pela cor)."""
         try:
             return tuple(pg.pixel(int(x), int(y)))
         except Exception:
-            return (0, 0, 0)
+            return None
+
+    def _tolerance(self):
+        try:
+            return max(0, int(self.config["safety"].get("color_tolerance", 30)))
+        except (TypeError, ValueError):
+            return 30
 
     def test_detection(self, kind):
         """Uma busca só, com print marcando o que achou — para ajustar precisão e áreas."""
@@ -701,7 +720,8 @@ class BotEngine:
         if kind == "battle":
             x, y = self._abs_point(cfg["cavebot"]["hp_pixel"])
             rgb = self._pixel(x, y)
-            extra = {"hp_pixel": [x, y], "rgb": list(rgb), "matches": list(rgb) == list(cfg["cavebot"]["hp_color"])}
+            extra = {"hp_pixel": [x, y], "rgb": list(rgb or (0, 0, 0)),
+                     "matches": _color_close(rgb, cfg["cavebot"]["hp_color"], self._tolerance())}
             cv2.circle(canvas, (int(x), int(y)), 10 * thick, (255, 112, 169), thick)
 
         self.log(f"Teste de detecção ({kind}): {sum(r['found'] for r in results)}/{len(results)} encontrados.", "info")
@@ -732,7 +752,7 @@ class BotEngine:
         if not pick or pick["result"] is not None or pick["cancelled"]:
             return
         x, y = pg.position()
-        rgb = list(self._pixel(x, y))
+        rgb = list(self._pixel(x, y) or (0, 0, 0))
         pick["points"].append([x, y])
         self._beep()
         # coordenadas salvas na config ficam no "referencial" da janela; recortes usam a tela real
@@ -771,6 +791,15 @@ class BotEngine:
             return True
         if pg is None or ic is None:
             self.log("Dependências faltando (veja os erros acima). Módulo não iniciado.", "error", name)
+            return False
+        for other in CONFLICTS.get(name, ()):
+            if self.is_running(other):
+                self.stop(other)
+                self.log(f"{MODULES[other]} desligada: o {MODULES[name]} já faz isso sozinho.", "warn", other)
+        blocker = next((m for m, others in CONFLICTS.items() if name in others and self.is_running(m)), None)
+        if blocker:
+            self.log(f"O {MODULES[blocker]} já faz isso sozinho. Desligue o {MODULES[blocker]} para usar a {MODULES[name]}.",
+                     "warn", name)
             return False
         if name == "heal" and len(self.config["heal"]["pixel"]) != 2:
             self.log("Configure o pixel da sua vida em Ajustes > Cura antes de ligar.", "error", name)
@@ -920,7 +949,9 @@ class BotEngine:
         while self._wait_ready(stop, "heal"):
             c = self.config["heal"]
             x, y = self._abs_point(c["pixel"])
-            if list(self._pixel(x, y)) != list(c["color"]) and time.time() - last >= c["cooldown"]:
+            rgb = self._pixel(x, y)
+            low = rgb is not None and not _color_close(rgb, c["color"], self._tolerance())
+            if low and time.time() - last >= c["cooldown"]:
                 ic.press(c["key"])
                 last = time.time()
                 self.stats.heal()
@@ -971,9 +1002,12 @@ class BotEngine:
         self.log("Inimigo na batalha, atacando até morrer.", "info", "cavebot")
         self._attack()
         x, y = self._abs_point(c["hp_pixel"])
-        red = tuple(c["hp_color"])
         started = time.time()
-        while not stop.is_set() and self._pixel(x, y) == red:
+        while not stop.is_set():
+            rgb = self._pixel(x, y)
+            # leitura falhou (None): na dúvida, continua lutando até o tempo limite
+            if rgb is not None and not _color_close(rgb, c["hp_color"], self._tolerance()):
+                break
             if timeout and time.time() - started > timeout:
                 self.alert(f"Luta passou de {int(timeout)}s, desisti e segui a rota.", "warn", "cavebot")
                 return

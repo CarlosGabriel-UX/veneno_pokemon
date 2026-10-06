@@ -15,6 +15,8 @@ Janela para ligar e desligar o bot sem usar o terminal.
 - Os módulos **pausam sozinhos quando o jogo não está em primeiro plano** (não clicam em outras janelas)
 - Se a janela do jogo fechar, tudo para
 - O cavebot desiste de uma luta que passar do **tempo máximo** e **para sozinho** se ficar várias voltas sem achar ponto no minimapa
+- A vida (do inimigo e a sua) é lida com uma **tolerância de cor** ajustável, e se a leitura do pixel falhar a Cura não aperta nada
+- Ligar o **Cavebot** desliga a Batalha e a Captura, que ele já faz sozinho; enquanto ele estiver ligado, as duas não ligam
 - **Alertas** com som e o painel piscando na barra de tarefas (erro, travamento, jogo fechado, timer, pokémon com 🔔)
 - Só abre **um painel por vez**
 
