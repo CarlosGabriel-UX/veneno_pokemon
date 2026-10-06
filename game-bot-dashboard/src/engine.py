@@ -73,6 +73,8 @@ DEFAULT_CONFIG = {
         "color": [],
         "cooldown": 2,
         "interval": 0.3,
+        "faint_pixel": [],  # ponto no começo da barra de vida do SEU pokémon; vazio = não vigia desmaio
+        "faint_color": [],
     },
     "safety": {
         "pause_unfocused": True,
@@ -90,8 +92,11 @@ DEFAULT_CONFIG = {
     "theme": "roxo",  # cor principal do painel: roxo, verde ou azul
 }
 
-# recorte da mensagem do jogo que aparece quando a captura dá certo
+# recortes de mensagens do jogo: captura que deu certo e falta de pokébola
 SUCCESS_IMAGE = "captura_ok/sucesso.png"
+NO_BALL_IMAGE = "captura_ok/sem_pokebola.png"
+MESSAGE_IMAGES = {"success": SUCCESS_IMAGE, "noball": NO_BALL_IMAGE}
+FAINT_READS = 3  # leituras seguidas (1 por segundo) com a barra vazia antes de parar tudo
 
 PICK_HOTKEY = "F8"
 VK_CODES = {f"F{i}": 0x6F + i for i in range(1, 13)}
@@ -305,6 +310,7 @@ class BotEngine:
         self._alerted = {}
         self._confirm_lock = threading.Lock()
         self._confirm = None  # (pokémon, módulo, até quando procurar) da última pokébola
+        self._faint_reads = 0
 
         threading.Thread(target=self._hotkey_watcher, daemon=True).start()
         threading.Thread(target=self._health_watcher, daemon=True).start()
@@ -531,6 +537,7 @@ class BotEngine:
                 self.stop_all()
                 self.alert("A janela do jogo sumiu: parei tudo.")
             was_found = found
+            self._check_faint()
 
             if self._deadline and time.time() >= self._deadline:
                 self._deadline = None
@@ -540,6 +547,23 @@ class BotEngine:
                 else:
                     self.log("Timer acabou.", "info")
             time.sleep(1)
+
+    def _check_faint(self):
+        """Para tudo quando o começo da barra de vida do seu pokémon perde a cor (desmaiou)."""
+        c = self.config["heal"]
+        point, color = c.get("faint_pixel") or [], c.get("faint_color") or []
+        if len(point) != 2 or len(color) != 3 or not self.any_running() or not self._health["focused"]:
+            self._faint_reads = 0
+            return
+        rgb = self._pixel(*self._abs_point(point))
+        if rgb is None or _color_close(rgb, color, self._tolerance()):
+            self._faint_reads = 0
+            return
+        self._faint_reads += 1
+        if self._faint_reads >= FAINT_READS:
+            self._faint_reads = 0
+            self.stop_all()
+            self.alert("Seu pokémon desmaiou: parei tudo.")
 
     def _wait_ready(self, stop, module):
         """Segura o módulo enquanto o jogo não estiver em primeiro plano. False se mandaram parar."""
@@ -772,7 +796,7 @@ class BotEngine:
         pick["points"].append([x, y])
         self._beep()
         # coordenadas salvas na config ficam no "referencial" da janela; recortes usam a tela real
-        if pick["target"] in ("new_pokemon", "new_waypoint", "success_msg"):
+        if pick["target"] in ("new_pokemon", "new_waypoint", "msg_success", "msg_noball"):
             dx = dy = 0
         else:
             if not self.config.get("window_ref") and self._game_rect:
@@ -935,28 +959,52 @@ class BotEngine:
                 time.sleep(0.1)
                 self._click(pos.x, pos.y)
                 self.stats.ball(poke, module)
+                if self._out_of_balls(module):
+                    return False
                 self._watch_success(poke, module)
                 caught = True
         return caught
 
-    # ---------- confirmação de captura ----------
-    def has_success_image(self):
-        return (self.img / SUCCESS_IMAGE).exists()
-
-    def set_success_image(self, region):
-        """Recorta a mensagem de captura com sucesso do jogo."""
-        img, _ = self._grab(region)
-        dest = self.img / SUCCESS_IMAGE
-        dest.parent.mkdir(exist_ok=True)
-        _write_png(dest, img)
-        self.log("Mensagem de captura salva: agora o bot conta as capturas confirmadas.", "success")
+    def _out_of_balls(self, module):
+        """Depois de jogar, vê se o jogo avisou que acabaram as pokébolas. Se sim, desliga o módulo."""
+        if not self.has_message_image("noball"):
+            return False
+        time.sleep(0.5)
+        if not self._locate(NO_BALL_IMAGE, self.config["capture"]["confidence"]):
+            return False
+        self.stop(module)
+        artigo = "a" if MODULES[module].endswith("a") else "o"
+        self.alert(f"Acabaram as pokébolas: desliguei {artigo} {MODULES[module]}.", "error", module)
         return True
 
-    def remove_success_image(self):
-        path = self.img / SUCCESS_IMAGE
+    # ---------- mensagens do jogo (captura confirmada, sem pokébola) ----------
+    MESSAGE_LOGS = {
+        "success": ("Mensagem de captura salva: agora o bot conta as capturas confirmadas.",
+                    "Mensagem de captura removida: o bot volta a contar só as pokébolas."),
+        "noball": ("Mensagem de sem pokébola salva: o bot para quando elas acabarem.",
+                   "Mensagem de sem pokébola removida: o bot não vigia mais as pokébolas."),
+    }
+
+    def has_message_image(self, kind):
+        return (self.img / MESSAGE_IMAGES[kind]).exists()
+
+    def has_success_image(self):
+        return self.has_message_image("success")
+
+    def set_message_image(self, kind, region):
+        """Recorta da tela uma mensagem do jogo (kind: success ou noball)."""
+        img, _ = self._grab(region)
+        dest = self.img / MESSAGE_IMAGES[kind]
+        dest.parent.mkdir(exist_ok=True)
+        _write_png(dest, img)
+        self.log(self.MESSAGE_LOGS[kind][0], "success")
+        return True
+
+    def remove_message_image(self, kind):
+        path = self.img / MESSAGE_IMAGES[kind]
         if path.exists():
             path.unlink()
-        self.log("Mensagem de captura removida: o bot volta a contar só as pokébolas.", "info")
+        self.log(self.MESSAGE_LOGS[kind][1], "info")
 
     def _watch_success(self, poke, module):
         """Depois de uma pokébola, procura a mensagem de sucesso por alguns segundos numa thread à parte."""

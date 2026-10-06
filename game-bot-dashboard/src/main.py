@@ -9,7 +9,7 @@ from pathlib import Path
 
 import webview
 
-from engine import MODULES, PANEL_TITLE, PICK_HOTKEY, SUCCESS_IMAGE, BotEngine
+from engine import MESSAGE_IMAGES, MODULES, PANEL_TITLE, PICK_HOTKEY, BotEngine
 
 VERSION = "1.1.0"
 REPO = "Lis-Alon/Veneno_do_pokemon"
@@ -121,7 +121,8 @@ class API:
             "pick_hotkey": PICK_HOTKEY,
             "capture": [encode("captura", n) for n in self._engine.capture_images()],
             "waypoints": [encode("map", n) for n in self._engine.map_waypoints()],
-            "success": encode(*SUCCESS_IMAGE.split("/"))["src"] if self._engine.has_success_image() else None,
+            "messages": {kind: encode(*path.split("/"))["src"] if self._engine.has_message_image(kind) else None
+                         for kind, path in MESSAGE_IMAGES.items()},
         }
 
     def add_pokemon_from_file(self, name):
@@ -144,11 +145,11 @@ class API:
     def remove_waypoint(self, name):
         self._engine.remove_waypoint(name)
 
-    def set_success_image(self, region):
-        return self._engine.set_success_image(region)
+    def set_message_image(self, kind, region):
+        return self._engine.set_message_image(kind, region)
 
-    def remove_success_image(self):
-        self._engine.remove_success_image()
+    def remove_message_image(self, kind):
+        self._engine.remove_message_image(kind)
 
     # calibração e testes
     def start_pick(self, kind, target):

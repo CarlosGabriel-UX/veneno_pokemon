@@ -11,7 +11,9 @@ const PICK_TARGETS = {
   "heal.pixel": "Pixel da sua vida",
   new_pokemon: "Recortar pokémon da tela",
   new_waypoint: "Recortar ponto do minimapa",
-  success_msg: "Recortar mensagem de captura",
+  "heal.faint_pixel": "Começo da barra do seu pokémon",
+  msg_success: "Recortar mensagem de captura",
+  msg_noball: "Recortar mensagem de sem pokébola",
 };
 const FKEYS = Array.from({ length: 12 }, (_, i) => `F${i + 1}`);
 
@@ -294,10 +296,10 @@ async function applyPick(target, result) {
     await afterPokemonAdded(added);
     return;
   }
-  if (target === "success_msg") {
-    await call("set_success_image", result.region);
+  if (target.startsWith("msg_")) {
+    await call("set_message_image", target.slice(4), result.region);
     await refreshImages();
-    toast("Mensagem de captura salva");
+    toast("Mensagem salva");
     return;
   }
   if (target === "new_waypoint") {
@@ -320,7 +322,11 @@ async function applyPick(target, result) {
   if (result.region) input.value = result.region.join(", ");
   else {
     input.value = `${result.x}, ${result.y}`;
-    const colorPath = { "cavebot.hp_pixel": "cavebot.hp_color", "heal.pixel": "heal.color" }[target];
+    const colorPath = {
+      "cavebot.hp_pixel": "cavebot.hp_color",
+      "heal.pixel": "heal.color",
+      "heal.faint_pixel": "heal.faint_color",
+    }[target];
     if (colorPath) $(`[data-path="${colorPath}"]`).value = result.rgb.join(", ");
   }
   config = { ...config, window_ref: (await api.get_config()).window_ref };
@@ -373,7 +379,9 @@ function renderGroupSummaries() {
   const sums = {
     profiles: c.profile ? `Perfil atual: ${c.profile}` : "Nenhum perfil carregado",
     coords: `Minimapa ${c.cavebot.map_region.join(", ")} · vida do inimigo ${c.cavebot.hp_pixel.join(", ")}`,
-    heal: c.heal.pixel?.length === 2 ? `Tecla ${String(c.heal.key).toUpperCase()} · pixel ${c.heal.pixel.join(", ")}` : "Não configurada",
+    heal:
+      (c.heal.pixel?.length === 2 ? `Tecla ${String(c.heal.key).toUpperCase()} · pixel ${c.heal.pixel.join(", ")}` : "Não configurada") +
+      (c.heal.faint_pixel?.length === 2 ? " · vigia desmaio" : ""),
     safety: `Luta até ${c.safety.fight_timeout || "∞"}s · tolerância ${c.safety.color_tolerance ?? 30}${c.safety.pause_unfocused ? " · pausa fora de foco" : ""}`,
     hotkeys: `Parar tudo ${c.stop_hotkey}${keys.length ? " · " + keys.join(", ") : ""}`,
     battle: `Teclas ${c.battle.attack_keys.join(", ")} · a cada ${c.battle.interval}s`,
@@ -510,18 +518,23 @@ async function refreshImages() {
   images = await call("get_images");
   buildCaptureGrid();
   buildRoute();
-  renderSuccess();
+  renderMessages();
 }
 
-function renderSuccess() {
-  const box = $("#success-preview");
-  if (images.success) {
-    box.replaceChildren(Object.assign(el("img"), { src: images.success, alt: "Mensagem de captura com sucesso" }));
-  } else {
-    box.replaceChildren(el("span", "muted", "Não configurada: só as pokébolas são contadas."));
+const MESSAGE_EMPTY = {
+  success: "Não configurada: só as pokébolas são contadas.",
+  noball: "Não configurada: o bot continua jogando mesmo sem pokébola.",
+};
+
+function renderMessages() {
+  for (const box of $$("[data-msg]")) {
+    const src = images.messages[box.dataset.msg];
+    $(".success-preview", box).replaceChildren(
+      src ? Object.assign(el("img"), { src, alt: "Mensagem do jogo" }) : el("span", "muted", MESSAGE_EMPTY[box.dataset.msg]),
+    );
+    $("[data-msg-set]", box).textContent = src ? "Recortar de novo" : "Recortar mensagem da tela";
+    $("[data-msg-remove]", box).hidden = !src;
   }
-  $("#success-set").textContent = images.success ? "Recortar de novo" : "Recortar mensagem da tela";
-  $("#success-remove").hidden = !images.success;
 }
 
 function openAddPokemon() {
@@ -896,7 +909,7 @@ async function refreshStats() {
       el("td", null, pretty(n)),
       el("td", "num", `${s.session.balls[n] || 0} / ${caughtS}`),
       el("td", "num", `${ballsT} / ${caughtT}`),
-      el("td", "num", ballsT && images.success ? `${Math.round((caughtT / ballsT) * 100)}%` : "–"),
+      el("td", "num", ballsT && images.messages.success ? `${Math.round((caughtT / ballsT) * 100)}%` : "–"),
     );
     body.append(tr);
   }
@@ -976,12 +989,15 @@ function wireUi() {
   $("#pick-cancel").addEventListener("click", () => api.cancel_pick());
   $$("[data-swatch]").forEach((sw) => $(`[data-path="${sw.dataset.swatch}"]`).addEventListener("input", updateSwatches));
   $("#add-poke").addEventListener("click", openAddPokemon);
-  $("#success-set").addEventListener("click", () => startPick("region", "success_msg"));
-  $("#success-remove").addEventListener("click", async () => {
-    if (!confirm("Remover a mensagem de captura? O bot volta a contar só as pokébolas.")) return;
-    await call("remove_success_image");
-    await refreshImages();
-  });
+  for (const box of $$("[data-msg]")) {
+    const kind = box.dataset.msg;
+    $("[data-msg-set]", box).addEventListener("click", () => startPick("region", `msg_${kind}`));
+    $("[data-msg-remove]", box).addEventListener("click", async () => {
+      if (!confirm("Remover esta mensagem do jogo?")) return;
+      await call("remove_message_image", kind);
+      await refreshImages();
+    });
+  }
   $("#add-waypoint").addEventListener("click", openAddWaypoint);
   $("#ref-set").addEventListener("click", async () => {
     config = await call("set_window_ref");
@@ -1060,7 +1076,7 @@ async function init() {
   $$("[data-pickkey]").forEach((k) => (k.textContent = pickKey));
   buildModules(images.modules);
   buildCaptureGrid();
-  renderSuccess();
+  renderMessages();
   wireRouteDnD();
   applyConfig();
   wireUi();

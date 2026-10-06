@@ -128,15 +128,24 @@
         </div>
         <h3 class="sub-title">Confirmar captura</h3>
         <p class="hint">Recorte a mensagem que o jogo mostra quando a captura dá certo. Depois de cada pokébola, o bot procura essa mensagem e conta a captura nas estatísticas.</p>
-        <div class="success-box">
-          <div id="success-preview" class="success-preview"><span class="muted">Não configurada: só as pokébolas são contadas.</span></div>
+        <div class="success-box" data-msg="success">
+          <div class="success-preview"><span class="muted">Não configurada: só as pokébolas são contadas.</span></div>
           <div class="row-gap">
-            <button class="btn" id="success-set">Recortar mensagem da tela</button>
-            <button class="btn ghost" id="success-remove" hidden>Remover</button>
+            <button class="btn" data-msg-set>Recortar mensagem da tela</button>
+            <button class="btn ghost" data-msg-remove hidden>Remover</button>
           </div>
         </div>
         <div class="fields">
           <label>Procurar a mensagem por (s) <small>depois de cada pokébola</small> <input data-path="capture.confirm_wait" type="number" step="0.5" min="1"></label>
+        </div>
+        <h3 class="sub-title">Parar sem pokébola</h3>
+        <p class="hint">Recorte a mensagem que o jogo mostra quando você tenta jogar sem ter pokébola. Se ela aparecer depois de uma pokébola, a Captura ou o Cavebot desliga e o painel avisa.</p>
+        <div class="success-box" data-msg="noball">
+          <div class="success-preview"><span class="muted">Não configurada: o bot continua jogando mesmo sem pokébola.</span></div>
+          <div class="row-gap">
+            <button class="btn" data-msg-set>Recortar mensagem da tela</button>
+            <button class="btn ghost" data-msg-remove hidden>Remover</button>
+          </div>
         </div>
         <button class="btn primary save">Salvar</button>
       </div>
@@ -245,6 +254,16 @@
             </label>
             <label>Tecla de cura <small>ex.: f1, 2</small> <input data-path="heal.key" type="text" maxlength="4"></label>
             <label>Espera entre curas (s) <input data-path="heal.cooldown" type="number" step="0.5" min="0.5"></label>
+          </div>
+          <h3 class="sub-title">Pokémon desmaiado</h3>
+          <p class="hint">Pegue um pixel bem no <b>começo</b> (lado esquerdo) da barra de vida do seu pokémon, com a vida cheia. Se esse ponto perder a cor por alguns segundos, a barra zerou: o bot para tudo e avisa.</p>
+          <div class="fields">
+            <label>Pixel do começo da barra <small>x, y</small>
+              <span class="with-btn"><input data-path="heal.faint_pixel" data-type="numlist" data-len="2" data-optional type="text" placeholder="não configurado"><button class="btn small" data-pick="point" data-target="heal.faint_pixel">Pegar</button></span>
+            </label>
+            <label>Cor com vida <small>R, G, B</small>
+              <span class="with-btn"><input data-path="heal.faint_color" data-type="numlist" data-len="3" data-optional type="text"><span class="swatch" data-swatch="heal.faint_color"></span></span>
+            </label>
           </div>
           </div>
         </details>

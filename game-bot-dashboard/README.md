@@ -34,6 +34,8 @@ Janela para ligar e desligar o bot sem usar o terminal.
 - **Rota**: arraste para mudar a ordem, ligue/desligue pontos, tempo de caminhada por ponto, **+ Adicionar ponto** recortando do minimapa; **Testar minimapa**
 - **Estatísticas**: números da sessão, gráficos dos últimos 14 dias e pokébolas e capturas por pokémon, com a taxa de acerto (salvo em `estatisticas.db`)
 - **Confirmar captura** (aba Captura): recorte da tela a mensagem que o jogo mostra quando a captura dá certo. Depois de cada pokébola, o bot procura essa mensagem por alguns segundos e conta a captura. Ela fica em `imags/captura_ok/sucesso.png`; sem ela, o bot conta só as pokébolas
+- **Parar sem pokébola** (aba Captura): recorte a mensagem que o jogo mostra quando você tenta jogar sem pokébola. Se ela aparecer depois de uma pokébola, a Captura ou o Cavebot desliga e o painel avisa. Fica em `imags/captura_ok/sem_pokebola.png`
+- **Pokémon desmaiado** (Ajustes > Cura): pegue um pixel no começo da barra de vida do seu pokémon. Se ele perder a cor por 3 segundos seguidos com o jogo em foco, o bot para tudo e avisa
 - **Ajustes**: grupos que abrem e fecham, com um resumo no título (perfis, coordenadas com **Marcar/Pegar** — posicione o mouse no jogo e aperte **F8** —, cura, segurança, atalhos, batalha e geral); em **Geral** dá para trocar a **cor do painel** (roxo, verde veneno ou azul)
 
 ## Arquivos que o painel cria
