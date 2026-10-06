@@ -1,0 +1,7 @@
+interception-python
+opencv-python
+pyautogui
+pywin32
+torch
+torchvision
+scipy

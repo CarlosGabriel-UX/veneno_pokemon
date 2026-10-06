@@ -1,0 +1,7 @@
+pywebview
+pyautogui
+opencv-python
+pillow
+interception-python
+pywin32
+pygetwindow
