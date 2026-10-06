@@ -139,6 +139,8 @@ function appendLogs(logs) {
   }
   while (box.childElementCount > 800) box.firstElementChild.remove();
   const last = logs[logs.length - 1];
+  const said = [...logs].reverse().find((l) => l.module && ["success", "error", "warn"].includes(l.level));
+  if (said) mascotSay(said);
   const sb = $("#sb-last");
   sb.className = `sb-last full-only ${last.level}`;
   sb.textContent = `${last.time}  ${last.module ? `[${moduleEls[last.module]?.label || last.module}] ` : ""}${last.msg}`;
@@ -169,6 +171,7 @@ async function poll() {
     }
     const pill = $("#status-pill");
     pill.classList.toggle("on", count > 0);
+    document.body.classList.toggle("busy", count > 0);
     pill.textContent = count === 0 ? "Parado" : count === 1 ? "1 rodando" : `${count} rodando`;
     const names = Object.entries(moduleEls).filter(([n]) => s.running[n]).map(([, m]) => m.label);
     const sbRun = $("#sb-running");
@@ -365,7 +368,58 @@ function fillForm() {
   updateSwatches();
   renderWindowRef();
   applyTheme(config.theme);
+  renderMascot();
   renderGroupSummaries();
+}
+
+// ---------- mascote ----------
+const BUILTIN_MASCOTS = { roxa: "Garota roxa", verde: "Garota verde", azul: "Garota azul" };
+const THEME_MASCOT = { roxo: "roxa", verde: "verde", azul: "azul" };
+let bubbleTimer = null;
+
+function mascotSrc(choice) {
+  if (choice === "auto") choice = THEME_MASCOT[document.body.dataset.theme] || "roxa";
+  if (BUILTIN_MASCOTS[choice]) return `mascotes/${choice}.svg`;
+  return images?.mascots?.find((m) => m.name === choice)?.src || null;
+}
+
+function buildMascotSelect() {
+  const sel = $("#mascot-select");
+  const opts = [["auto", "Automática (combina com a cor)"], ["", "Nenhuma"], ...Object.entries(BUILTIN_MASCOTS)];
+  for (const m of images?.mascots || []) opts.push([m.name, m.name.replace(/\.[^.]+$/, "")]);
+  sel.replaceChildren(...opts.map(([v, t]) => Object.assign(el("option", null, t), { value: v })));
+  sel.value = config?.mascot ?? "auto";
+  if (sel.selectedIndex < 0) sel.value = "auto";
+}
+
+function renderMascot(choice) {
+  if ($("#mascot-select").selectedIndex < 0) $("#mascot-select").value = "auto"; // imagem apagada da pasta
+  choice ??= $("#mascot-select").value;
+  const src = choice ? mascotSrc(choice) : null;
+  const mode = $("#mascot-mode").value;
+  const big = mode === "fundo" || mode === "tela";
+  const opacity = Number($("#mascot-opacity").value) || 50;
+  $("#mascot").hidden = !src || big;
+  $("#mascot-bg").hidden = !src || !big;
+  document.body.classList.toggle("mascot-big", Boolean(src) && big);
+  $("#mascot-opacity-field").hidden = !big;
+  $("#mascot-opacity-value").textContent = `${opacity}%`;
+  $("#mascot-bg").style.opacity = opacity / 100;
+  $("#mascot-bg").classList.toggle("cover", mode === "tela");
+  for (const img of [$("#mascot-img"), $("#mascot-bg-img")]) {
+    if (src && img.getAttribute("src") !== src) img.src = src;
+  }
+}
+
+// a mascote comenta capturas, alertas e erros num balão por alguns segundos
+function mascotSay(log) {
+  if ($("#mascot").hidden || !["success", "error", "warn"].includes(log.level) || !log.module) return;
+  const bubble = $("#mascot-bubble");
+  bubble.textContent = log.msg;
+  bubble.className = `bubble ${log.level}`;
+  bubble.hidden = false;
+  clearTimeout(bubbleTimer);
+  bubbleTimer = setTimeout(() => (bubble.hidden = true), 5000);
 }
 
 function applyTheme(theme) {
@@ -519,6 +573,10 @@ async function refreshImages() {
   buildCaptureGrid();
   buildRoute();
   renderMessages();
+  const keep = $("#mascot-select").value;
+  buildMascotSelect();
+  if (keep && [...$("#mascot-select").options].some((o) => o.value === keep)) $("#mascot-select").value = keep;
+  renderMascot();
 }
 
 const MESSAGE_EMPTY = {
@@ -960,7 +1018,23 @@ function wireUi() {
   }
 
   $$(".save").forEach((b) => b.addEventListener("click", () => save()));
-  $("#theme-select").addEventListener("change", (e) => applyTheme(e.target.value));
+  $("#theme-select").addEventListener("change", (e) => {
+    applyTheme(e.target.value);
+    renderMascot();
+  });
+  $("#mascot-select").addEventListener("change", (e) => renderMascot(e.target.value));
+  $("#mascot-mode").addEventListener("change", () => renderMascot());
+  $("#mascot-opacity").addEventListener("input", () => renderMascot());
+  $("#mascot-add").addEventListener("click", async () => {
+    const added = await call("add_mascot_from_file");
+    if (!added) return;
+    images = await call("get_images");
+    buildMascotSelect();
+    $("#mascot-select").value = added;
+    renderMascot(added);
+    await save("Mascote adicionada");
+  });
+  $("#mascot-folder").addEventListener("click", () => call("open_mascot_folder"));
   wireGroups();
   $("#stop-all").addEventListener("click", () => api.stop_all());
   $("#clear-logs").addEventListener("click", () => $("#log").replaceChildren());
@@ -1077,6 +1151,7 @@ async function init() {
   buildModules(images.modules);
   buildCaptureGrid();
   renderMessages();
+  buildMascotSelect();
   wireRouteDnD();
   applyConfig();
   wireUi();

@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 260">
+  <ellipse cx="100" cy="250" rx="46" ry="6" fill="#000" opacity=".25"/>
+  <!-- cabelo de trás (marias-chiquinhas) -->
+  <path d="M52 92C30 110 26 160 40 190c6 12 22 10 22-4 0-18-4-40 4-60z" fill="#23885a" stroke="#2a1a33" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M148 92c22 18 26 68 12 98-6 12-22 10-22-4 0-18 4-40-4-60z" fill="#23885a" stroke="#2a1a33" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M48 104C38 38 162 38 152 104l2 52H46z" fill="#23885a" stroke="#2a1a33" stroke-width="2.5" stroke-linejoin="round"/>
+  <!-- pernas e sapatos -->
+  <rect x="84" y="212" width="11" height="30" rx="5" fill="#ffe3d1" stroke="#2a1a33" stroke-width="2.5"/>
+  <rect x="105" y="212" width="11" height="30" rx="5" fill="#ffe3d1" stroke="#2a1a33" stroke-width="2.5"/>
+  <ellipse cx="88" cy="244" rx="10" ry="6" fill="#25a870" stroke="#2a1a33" stroke-width="2.5"/>
+  <ellipse cx="112" cy="244" rx="10" ry="6" fill="#25a870" stroke="#2a1a33" stroke-width="2.5"/>
+  <!-- braços -->
+  <path d="M76 172c-12 8-20 20-22 32" stroke="#2a1a33" stroke-width="13" stroke-linecap="round" fill="none"/>
+  <path d="M76 172c-12 8-20 20-22 32" stroke="#ffe3d1" stroke-width="8" stroke-linecap="round" fill="none"/>
+  <path d="M124 172c12 6 22 0 30-12" stroke="#2a1a33" stroke-width="13" stroke-linecap="round" fill="none"/>
+  <path d="M124 172c12 6 22 0 30-12" stroke="#ffe3d1" stroke-width="8" stroke-linecap="round" fill="none"/>
+  <!-- vestido -->
+  <path d="M78 160h44l20 58c-26 10-58 10-84 0z" fill="#3ddc97" stroke="#2a1a33" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M62 210c24 7 52 7 76 0" stroke="#fff" stroke-width="3" fill="none" opacity=".7"/>
+  <path d="M84 160l16 14 16-14" fill="#fff" stroke="#2a1a33" stroke-width="2.5" stroke-linejoin="round"/>
+  <circle cx="100" cy="186" r="4" fill="#fff" stroke="#2a1a33" stroke-width="2"/>
+  <!-- cabeça -->
+  <ellipse cx="100" cy="104" rx="52" ry="48" fill="#ffe3d1" stroke="#2a1a33" stroke-width="2.5"/>
+  <!-- franja -->
+  <path d="M46 108C36 34 164 34 154 108c-6-12-14-20-22-24l-4 20-12-24-14 22-12-22-12 24-4-20c-10 4-22 12-28 24z" fill="#36b57c" stroke="#2a1a33" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M100 58c-2-10 4-18 12-20-6 6-6 12-4 18" fill="#36b57c" stroke="#2a1a33" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M70 66c8-6 18-9 28-9" stroke="#fff" stroke-width="3" stroke-linecap="round" fill="none" opacity=".45"/>
+  <!-- olhos -->
+  <ellipse cx="80" cy="114" rx="9.5" ry="12.5" fill="#2a1a33"/>
+  <ellipse cx="80" cy="118" rx="7" ry="7.5" fill="#1f7a50"/>
+  <circle cx="76.5" cy="109" r="3.6" fill="#fff"/><circle cx="83" cy="121" r="1.6" fill="#fff"/>
+  <ellipse cx="120" cy="114" rx="9.5" ry="12.5" fill="#2a1a33"/>
+  <ellipse cx="120" cy="118" rx="7" ry="7.5" fill="#1f7a50"/>
+  <circle cx="116.5" cy="109" r="3.6" fill="#fff"/><circle cx="123" cy="121" r="1.6" fill="#fff"/>
+  <!-- bochechas e boca -->
+  <ellipse cx="66" cy="130" rx="8" ry="4.5" fill="#ff8fa8" opacity=".55"/>
+  <ellipse cx="134" cy="130" rx="8" ry="4.5" fill="#ff8fa8" opacity=".55"/>
+  <path d="M93 131q7 7 14 0" stroke="#2a1a33" stroke-width="2.5" fill="#ff7a90" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- enfeite -->
+  <path d="M138 78c2-12 12-18 20-18-1 10-8 19-20 18z" fill="#3ddc97" stroke="#2a1a33" stroke-width="2.5" stroke-linejoin="round"/><path d="M140 76c5-5 9-8 14-12" stroke="#2a1a33" stroke-width="2" fill="none" stroke-linecap="round"/>
+</svg>
