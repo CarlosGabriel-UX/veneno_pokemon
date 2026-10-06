@@ -4,9 +4,11 @@ from ctypes import wintypes
 
 import pygetwindow as gw
 
+import config_bot
+
 
 # Título completo da janela do jogo no Windows.
-WINDOW_TITLE = "otPokemon | Lisalon | South America"
+WINDOW_TITLE = config_bot.carregar()["window_title"]
 
 # Constantes da API do Windows
 GWL_EXSTYLE = -20

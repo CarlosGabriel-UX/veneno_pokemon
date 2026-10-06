@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+
+# Dados locais do bot (cada PC tem os seus)
+config.json
+*.db
+logs/
+
+# Build do painel (build.bat)
+game-bot-dashboard/build/
+game-bot-dashboard/dist/
+*.spec

@@ -29,7 +29,7 @@ class MemoryBank:
                           Defaults to <project>/memory_bank.db
         """
         if storage_path is None:
-            project_dir = Path(__file__).parent if '__file__' in dir() else Path.cwd()
+            project_dir = Path(__file__).parent
             storage_path = project_dir / "memory_bank.db"
         
         self.storage_path = Path(storage_path)
@@ -75,6 +75,33 @@ class MemoryBank:
                     y_coordinate INTEGER,
                     confidence REAL
                 )
+            """)
+
+            # Table: bot_stats - totals across runs
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS bot_stats (
+                    id INTEGER PRIMARY KEY DEFAULT 1,
+                    total_runs INTEGER DEFAULT 0,
+                    total_captures INTEGER DEFAULT 0,
+                    total_battles INTEGER DEFAULT 0,
+                    uptime_start TIMESTAMP,
+                    last_session_duration REAL DEFAULT 0
+                )
+            """)
+
+            # Table: configs - saved settings
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS configs (
+                    config_name TEXT PRIMARY KEY,
+                    config_data TEXT,
+                    last_updated TIMESTAMP
+                )
+            """)
+
+            # ON CONFLICT(icon_name) in update_icon_position needs a unique index
+            cursor.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_icon_positions_name
+                ON icon_positions (icon_name)
             """)
             
             # Insert initial stats if not exists
@@ -169,9 +196,17 @@ class MemoryBank:
                 INSERT INTO captured_pokemon (pokemon_name, image_path, capture_time, location, rarity)
                 VALUES (?, ?, datetime('now'), ?, ?)
             """, (pokemon_name, image_path, json.dumps(location) if location else None, rarity))
-            
+            cursor.execute("UPDATE bot_stats SET total_captures = total_captures + 1 WHERE id = 1")
+
             conn.commit()
-def get_capture_history(self, limit=50, rarity=None):
+
+    def record_battle(self):
+        """Count one battle in the bot stats."""
+        with sqlite3.connect(str(self.storage_path)) as conn:
+            conn.execute("UPDATE bot_stats SET total_battles = total_battles + 1 WHERE id = 1")
+            conn.commit()
+
+    def get_capture_history(self, limit=50, rarity=None):
         """Get history of captured Pokémon.
 
         Args:
@@ -197,69 +232,80 @@ def get_capture_history(self, limit=50, rarity=None):
                     SELECT pokemon_name, capture_time, location, rarity 
                     FROM captured_pokemon 
                     ORDER BY capture_time DESC
-def increment_run_count(self):
-        """Increment the total run count and update stats."""
+                    LIMIT ?
+                """, (limit,))
+
+            return [
+                {
+                    "name": row[0],
+                    "time": row[1],
+                    "location": json.loads(row[2]) if row[2] else None,
+                    "rarity": row[3]
+                }
+                for row in cursor.fetchall()
+            ]
+
+    def update_icon_position(self, icon_name, x, y, confidence=1.0):
+        """Update the last known position of an icon.
+
+        Args:
+            icon_name: Name/identifier of the icon
+            x: X coordinate
+            y: Y coordinate
+            confidence: Detection confidence (0.0 to 1.0)
+        """
         with sqlite3.connect(str(self.storage_path)) as conn:
             cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO icon_positions (icon_name, last_seen, x_coordinate, y_coordinate, confidence)
+                VALUES (?, datetime('now'), ?, ?, ?)
+                ON CONFLICT(icon_name) DO UPDATE SET
+                    last_seen = datetime('now'),
+                    x_coordinate = excluded.x_coordinate,
+                    y_coordinate = excluded.y_coordinate,
+                    confidence = excluded.confidence
+            """, (icon_name, x, y, confidence))
 
-            # Get current stats
-            cursor.execute("SELECT total_runs, total_captures, total_battles FROM bot_stats WHERE id = 1")
+            conn.commit()
+
+    def get_icon_position(self, icon_name):
+        """Get the last known position of an icon.
+
+        Args:
+            icon_name: Name/identifier of the icon
+
+        Returns:
+            Dict with x, y, confidence, last_seen or None
+        """
+        with sqlite3.connect(str(self.storage_path)) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT x_coordinate, y_coordinate, confidence, last_seen 
+                FROM icon_positions 
+                WHERE icon_name = ?
+            """, (icon_name,))
             row = cursor.fetchone()
 
-            total_runs = (row[0] or 0) + 1
-# Create default instance for convenience
-_memory_bank = None
+            if not row:
+                return None
 
-def get_memory_bank():
-    """Get the default MemoryBank instance (lazy initialization)."""
-    global _memory_bank
-    if _memory_bank is None:
-        _memory_bank = MemoryBank()
-    return _memory_bank
+            return {
+                "x": row[0],
+                "y": row[1],
+                "confidence": row[2],
+                "last_seen": row[3]
+            }
 
-
-# Convenience functions for common operations
-def record_capture(pokemon_name, image_path, location=None, rarity="unknown"):
-    """Quick function to record a capture."""
-    mb = get_memory_bank()
-    mb.record_capture(pokemon_name, image_path, location, rarity)
-
-
-def update_game_state(area=None, status=None, coordinates=None):
-    """Quick function to update game state."""
-    mb = get_memory_bank()
-    mb.update_game_state(area, status, coordinates)
-
-
-def get_game_state():
-    """Quick function to get game state."""
-    mb = get_memory_bank()
-    return mb.get_game_state()
-
-
-def update_icon_position(icon_name, x, y, confidence=1.0):
-    """Quick function to update icon position."""
-    mb = get_memory_bank()
-    mb.update_icon_position(icon_name, x, y, confidence)
-
-
-def get_icon_position(icon_name):
-    """Quick function to get icon position."""
-    mb = get_memory_bank()
-    return mb.get_icon_position(icon_name)
-
-
-def get_stats():
-    """Quick function to get bot statistics."""
-    mb = get_memory_bank()
-    return mb.get_stats()
-
+    def increment_run_count(self):
+        """Increment the total run count and restart the session clock."""
+        with sqlite3.connect(str(self.storage_path)) as conn:
+            cursor = conn.cursor()
             cursor.execute("""
-                UPDATE bot_stats 
-                SET total_runs = ?, 
-                    last_session_duration = CASE WHEN ? > 0 THEN ? ELSE 0 END
+                UPDATE bot_stats
+                SET total_runs = total_runs + 1,
+                    uptime_start = datetime('now')
                 WHERE id = 1
-            """, (total_runs, total_runs, total_runs))
+            """)
 
             conn.commit()
 
@@ -291,9 +337,9 @@ def get_stats():
             duration = None
             if uptime_start:
                 try:
-                    from datetime import datetime
-                    start = datetime.strptime(str(uptime_start), "%Y-%m-%d %H:%M:%S.%f")
-                    duration = (datetime.now() - start).total_seconds()
+                    # datetime('now') do SQLite grava em UTC, sem fração de segundo
+                    start = datetime.strptime(str(uptime_start), "%Y-%m-%d %H:%M:%S")
+                    duration = (datetime.utcnow() - start).total_seconds()
                 except (ValueError, TypeError):
                     duration = None
 
@@ -353,69 +399,61 @@ def get_stats():
             except json.JSONDecodeError:
                 return {}
 
-    def __del__(self):
-        """Close database connections on deletion."""
-        pass
-                    LIMIT ?
-                """, (limit,))
 
-            return [
-                {
-                    "name": row[0],
-                    "time": row[1],
-                    "location": json.loads(row[2]) if row[2] else None,
-                    "rarity": row[3]
-                }
-                for row in cursor.fetchall()
-            ]
 
-def update_icon_position(self, icon_name, x, y, confidence=1.0):
-        """Update the last known position of an icon.
+# Create default instance for convenience
+_memory_bank = None
 
-        Args:
-            icon_name: Name/identifier of the icon
-            x: X coordinate
-            y: Y coordinate
-            confidence: Detection confidence (0.0 to 1.0)
-        """
-        with sqlite3.connect(str(self.storage_path)) as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO icon_positions (icon_name, last_seen, x_coordinate, y_coordinate, confidence)
-                VALUES (?, datetime('now'), ?, ?, ?)
-                ON CONFLICT(icon_name) DO UPDATE SET
-                    last_seen = datetime('now'),
-                    x_coordinate = excluded.x_coordinate,
-                    y_coordinate = excluded.y_coordinate,
-                    confidence = excluded.confidence
-            """, (icon_name, x, y, confidence))
+def get_memory_bank():
+    """Get the default MemoryBank instance (lazy initialization)."""
+    global _memory_bank
+    if _memory_bank is None:
+        _memory_bank = MemoryBank()
+    return _memory_bank
 
-            conn.commit()
 
-def get_icon_position(self, icon_name):
-        """Get the last known position of an icon.
+# Convenience functions for common operations
+def record_capture(pokemon_name, image_path, location=None, rarity="unknown"):
+    """Quick function to record a capture."""
+    mb = get_memory_bank()
+    mb.record_capture(pokemon_name, image_path, location, rarity)
 
-        Args:
-            icon_name: Name/identifier of the icon
 
-        Returns:
-            Dict with x, y, confidence, last_seen or None
-        """
-        with sqlite3.connect(str(self.storage_path)) as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT x_coordinate, y_coordinate, confidence, last_seen 
-                FROM icon_positions 
-                WHERE icon_name = ?
-            """, (icon_name,))
-            row = cursor.fetchone()
+def update_game_state(area=None, status=None, coordinates=None):
+    """Quick function to update game state."""
+    mb = get_memory_bank()
+    mb.update_game_state(area, status, coordinates)
 
-            if not row:
-                return None
 
-            return {
-                "x": row[0],
-                "y": row[1],
-                "confidence": row[2],
-                "last_seen": row[3]
-            }
+def get_game_state():
+    """Quick function to get game state."""
+    mb = get_memory_bank()
+    return mb.get_game_state()
+
+
+def update_icon_position(icon_name, x, y, confidence=1.0):
+    """Quick function to update icon position."""
+    mb = get_memory_bank()
+    mb.update_icon_position(icon_name, x, y, confidence)
+
+
+def get_icon_position(icon_name):
+    """Quick function to get icon position."""
+    mb = get_memory_bank()
+    return mb.get_icon_position(icon_name)
+
+
+def get_stats():
+    """Quick function to get bot statistics."""
+    mb = get_memory_bank()
+    return mb.get_stats()
+
+
+def record_battle():
+    """Quick function to count a battle."""
+    get_memory_bank().record_battle()
+
+
+def increment_run_count():
+    """Quick function to count a new run."""
+    get_memory_bank().increment_run_count()
