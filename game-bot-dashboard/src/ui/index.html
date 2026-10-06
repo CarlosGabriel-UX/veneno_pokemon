@@ -7,6 +7,8 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <div id="mascot-bg" class="mascot-bg" hidden><img id="mascot-bg-img" alt=""></div>
+
   <header class="topbar">
     <div class="brand">
       <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
@@ -318,6 +320,15 @@
             </label>
             <label>Mascote
               <select data-path="mascot" id="mascot-select"></select>
+            </label>
+            <label>Tamanho da mascote
+              <select data-path="mascot_mode" id="mascot-mode">
+                <option value="canto">Pequena, no canto</option>
+                <option value="fundo">Grande, no fundo do painel</option>
+              </select>
+            </label>
+            <label id="mascot-opacity-field">Transparência no fundo <small id="mascot-opacity-value"></small>
+              <input data-path="mascot_opacity" data-type="number" id="mascot-opacity" type="range" min="10" max="100" step="5">
             </label>
             <label class="wide">Suas imagens <small>PNG, JPG, GIF ou WEBP; ficam em imags/mascotes</small>
               <span class="row-gap">

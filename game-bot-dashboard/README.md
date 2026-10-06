@@ -37,7 +37,7 @@ Janela para ligar e desligar o bot sem usar o terminal.
 - **Parar sem pokébola** (aba Captura): recorte a mensagem que o jogo mostra quando você tenta jogar sem pokébola. Se ela aparecer depois de uma pokébola, a Captura ou o Cavebot desliga e o painel avisa. Fica em `imags/captura_ok/sem_pokebola.png`
 - **Pokémon desmaiado** (Ajustes > Cura): pegue um pixel no começo da barra de vida do seu pokémon. Se ele perder a cor por 3 segundos seguidos com o jogo em foco, o bot para tudo e avisa
 - **Ajustes**: grupos que abrem e fecham, com um resumo no título (perfis, coordenadas com **Marcar/Pegar** — posicione o mouse no jogo e aperte **F8** —, cura, segurança, atalhos, batalha e geral); em **Geral** dá para trocar a **cor do painel** (roxo, verde veneno ou azul)
-- **Mascote**: uma garota no canto do painel que balança enquanto o bot roda e comenta capturas, alertas e erros num balão. Em **Ajustes > Geral** dá para escolher a da cor do painel (automática), uma das três prontas, nenhuma, ou uma imagem sua (PNG, JPG, GIF ou WEBP), que fica em `imags/mascotes`
+- **Mascote**: uma garota no canto do painel que balança enquanto o bot roda e comenta capturas, alertas e erros num balão. Em **Ajustes > Geral** dá para escolher a da cor do painel (automática), uma das três prontas, nenhuma, ou uma imagem sua (PNG, JPG, GIF ou WEBP), que fica em `imags/mascotes`. Em **Tamanho da mascote** dá para deixá-la pequena no canto ou grande no fundo do painel, com a transparência ajustável
 
 ## Arquivos que o painel cria
 

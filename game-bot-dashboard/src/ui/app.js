@@ -386,7 +386,7 @@ function mascotSrc(choice) {
 function buildMascotSelect() {
   const sel = $("#mascot-select");
   const opts = [["auto", "Automática (combina com a cor)"], ["", "Nenhuma"], ...Object.entries(BUILTIN_MASCOTS)];
-  for (const m of images?.mascots || []) opts.push([m.name, stem(m.name)]);
+  for (const m of images?.mascots || []) opts.push([m.name, m.name.replace(/\.[^.]+$/, "")]);
   sel.replaceChildren(...opts.map(([v, t]) => Object.assign(el("option", null, t), { value: v })));
   sel.value = config?.mascot ?? "auto";
   if (sel.selectedIndex < 0) sel.value = "auto";
@@ -396,8 +396,17 @@ function renderMascot(choice) {
   if ($("#mascot-select").selectedIndex < 0) $("#mascot-select").value = "auto"; // imagem apagada da pasta
   choice ??= $("#mascot-select").value;
   const src = choice ? mascotSrc(choice) : null;
-  $("#mascot").hidden = !src;
-  if (src && $("#mascot-img").getAttribute("src") !== src) $("#mascot-img").src = src;
+  const big = $("#mascot-mode").value === "fundo";
+  const opacity = Number($("#mascot-opacity").value) || 50;
+  $("#mascot").hidden = !src || big;
+  $("#mascot-bg").hidden = !src || !big;
+  document.body.classList.toggle("mascot-big", Boolean(src) && big);
+  $("#mascot-opacity-field").hidden = !big;
+  $("#mascot-opacity-value").textContent = `${opacity}%`;
+  $("#mascot-bg").style.opacity = opacity / 100;
+  for (const img of [$("#mascot-img"), $("#mascot-bg-img")]) {
+    if (src && img.getAttribute("src") !== src) img.src = src;
+  }
 }
 
 // a mascote comenta capturas, alertas e erros num balão por alguns segundos
@@ -1012,6 +1021,8 @@ function wireUi() {
     renderMascot();
   });
   $("#mascot-select").addEventListener("change", (e) => renderMascot(e.target.value));
+  $("#mascot-mode").addEventListener("change", () => renderMascot());
+  $("#mascot-opacity").addEventListener("input", () => renderMascot());
   $("#mascot-add").addEventListener("click", async () => {
     const added = await call("add_mascot_from_file");
     if (!added) return;

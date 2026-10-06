@@ -140,6 +140,20 @@ body.busy .mascot img { animation: mascot-bob 1.6s ease-in-out infinite; }
 .bubble.error { --b: var(--danger); }
 .bubble.warn { --b: var(--warn); }
 .bubble.success { --b: var(--on); }
+/* modo fundo: a imagem fica grande atrás do painel, com as bordas esmaecidas para sumir o fundo dela */
+.mascot-bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; display: flex; justify-content: flex-end; align-items: flex-end; }
+.mascot-bg[hidden] { display: none; }
+.mascot-bg img {
+  height: 100%; max-width: 75%; object-fit: contain; object-position: right bottom;
+  -webkit-mask-image: radial-gradient(ellipse 75% 85% at 60% 55%, #000 55%, transparent 100%);
+  mask-image: radial-gradient(ellipse 75% 85% at 60% 55%, #000 55%, transparent 100%);
+}
+body.mascot-big > :is(header, main, footer, .update-banner, .pick-banner) { position: relative; z-index: 1; }
+body.mascot-big .panel, body.mascot-big .card { background-color: rgba(23, 20, 31, .72); }
+body.mascot-big .log { background-color: rgba(11, 9, 16, .6); }
+.fields label[hidden] { display: none; }
+body.mascot-big .topbar, body.mascot-big .statusbar { background-color: rgba(15, 13, 20, .78); }
+input[type=range]#mascot-opacity { margin-top: 10px; }
 @media (prefers-reduced-motion: reduce) { body.busy .mascot img { animation: none; } }
 
 .card {
