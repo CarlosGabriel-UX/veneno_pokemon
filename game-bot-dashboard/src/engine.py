@@ -85,7 +85,14 @@ DEFAULT_CONFIG = {
     "alerts": {
         "sound": True,
     },
-    "hotkeys": {"battle": "", "capture": "", "cavebot": "", "heal": ""},
+    "macro": {
+        "max_seconds": 120,
+    },
+    "switch": {
+        "slots": [],
+        "interval": 60,
+    },
+    "hotkeys": {"battle": "", "capture": "", "cavebot": "", "heal": "", "switch": ""},
     "window_title": "otPokemon | Lisalon | South America",
     "window_ref": None,  # canto da janela do jogo quando as coordenadas foram marcadas
     "stop_hotkey": "F12",
@@ -106,12 +113,23 @@ FAINT_READS = 3  # leituras seguidas (1 por segundo) com a barra vazia antes de 
 PICK_HOTKEY = "F8"
 VK_CODES = {f"F{i}": 0x6F + i for i in range(1, 13)}
 VK_ESCAPE = 0x1B
+MACRO_KEYS = {
+    **{code: chr(code).lower() for code in range(0x41, 0x5B)},
+    **{code: chr(code) for code in range(0x30, 0x3A)},
+    **{0x70 + i: f"f{i + 1}" for i in range(12)},
+    0x08: "backspace", 0x09: "tab", 0x0D: "enter", 0x1B: "esc",
+    0x20: "space", 0x25: "left", 0x26: "up", 0x27: "right", 0x28: "down",
+}
+MACRO_KEYS.pop(0x77, None)  # F8 é a tecla de marcar
+MACRO_MOUSE_BUTTONS = {0x01: "left"}
+MAX_MACRO_ACTIONS = 20000
 
 MODULES = {
     "battle": "Batalha",
     "capture": "Captura",
     "cavebot": "Cavebot",
     "heal": "Cura",
+    "switch": "Troca",
 }
 
 
@@ -316,6 +334,17 @@ class BotEngine:
         self._confirm_lock = threading.Lock()
         self._confirm = None  # (pokémon, módulo, até quando procurar) da última pokébola
         self._faint_reads = 0
+        self._macro_lock = threading.RLock()
+        self._macro_recording = False
+        self._macro_record_stop = None
+        self._macro_record_thread = None
+        self._macro_record_started = 0.0
+        self._macro_record_duration = 0.0
+        self._macro_record_name = ""
+        self._macro_actions = []
+        self._macro_playing = False
+        self._macro_play_stop = None
+        self._macro_play_thread = None
 
         threading.Thread(target=self._hotkey_watcher, daemon=True).start()
         threading.Thread(target=self._health_watcher, daemon=True).start()
@@ -431,7 +460,8 @@ class BotEngine:
         return bool(t and t.is_alive())
 
     def any_running(self):
-        return any(self.is_running(n) for n in MODULES)
+        macro = self.macro_state()
+        return any(self.is_running(n) for n in MODULES) or macro["recording"] or macro["playing"]
 
     # ---------- alertas ----------
     def alert(self, msg, level="error", module=None):
@@ -875,6 +905,14 @@ class BotEngine:
         if name == "heal" and len(self.config["heal"]["pixel"]) != 2:
             self.log("Configure o pixel da sua vida em Ajustes > Cura antes de ligar.", "error", name)
             return False
+        if name == "switch":
+            slots = [s for s in self.config["switch"]["slots"] if s.get("point") and len(s["point"]) == 2]
+            if len(slots) < 2:
+                self.log("Configure pelo menos duas posições em Ações > Troca de Pokémon.", "error", name)
+                return False
+            if not 1 <= float(self.config["switch"].get("interval", 60)) <= 3600:
+                self.log("O intervalo de troca deve ficar entre 1 e 3600 segundos.", "error", name)
+                return False
         if not self._ensure_interception():
             return False
 
@@ -907,6 +945,8 @@ class BotEngine:
     def stop_all(self):
         for name in MODULES:
             self.stop(name)
+        self.stop_macro_recording()
+        self.stop_macro_playback()
 
     def toggle(self, name):
         if self.is_running(name):
@@ -1070,6 +1110,28 @@ class BotEngine:
             visible = seen
 
     # ---------- módulos ----------
+    def _run_switch(self, stop):
+        config = self.config["switch"]
+        interval = float(config.get("interval", 60))
+        slots = [s for s in config["slots"] if s.get("point") and len(s["point"]) == 2]
+        if len(slots) < 2:
+            self.log("Configure pelo menos duas posições para iniciar a troca automática.", "error", "switch")
+            return
+        index = 0
+        self.log(f"Troca automática ligada: intervalo de {interval:g} s.", "info", "switch")
+        while self._wait_ready(stop, "switch"):
+            slots = [s for s in self.config["switch"]["slots"] if s.get("point") and len(s["point"]) == 2]
+            if len(slots) < 2:
+                self.log("Restam menos de duas posições marcadas; troca automática encerrada.", "error", "switch")
+                return
+            slot = slots[index % len(slots)]
+            x, y = self._abs_point(slot["point"])
+            self._click(x, y)
+            self.log(f"Trocado para {slot['name']}.", "success", "switch")
+            index += 1
+            if stop.wait(interval):
+                return
+
     def _run_battle(self, stop):
         last = None
         while self._wait_ready(stop, "battle"):
@@ -1193,4 +1255,265 @@ class BotEngine:
             set_long(hwnd, -20, get_long(hwnd, -20) | 0x00080000)  # WS_EX_LAYERED
             user32.SetLayeredWindowAttributes(hwnd, 0, value, 0x2)  # LWA_ALPHA
         self.log(f"Opacidade do jogo: {round(value / 255 * 100)}%.", "info")
+        return True
+
+    # ---------- macros ----------
+    @property
+    def macros_dir(self):
+        return self.root / "macros"
+
+    def macro_state(self):
+        with self._macro_lock:
+            elapsed = time.monotonic() - self._macro_record_started if self._macro_recording else 0.0
+            return {
+                "recording": self._macro_recording,
+                "playing": self._macro_playing,
+                "name": self._macro_record_name,
+                "actions": len(self._macro_actions),
+                "elapsed": min(elapsed, self._macro_record_duration),
+                "duration": self._macro_record_duration,
+            }
+
+    def list_macros(self):
+        if not self.macros_dir.exists():
+            return []
+        return sorted(path.stem for path in self.macros_dir.glob("*.json"))
+
+    def delete_macro(self, name):
+        if not str(name or "").strip():
+            raise ValueError("Selecione uma macro para excluir.")
+        safe_name = _safe_name(name)
+        path = self.macros_dir / f"{safe_name}.json"
+        with self._macro_lock:
+            if self._macro_recording or self._macro_playing:
+                raise RuntimeError("Pare a gravação ou reprodução antes de excluir uma macro.")
+            try:
+                path.unlink()
+            except FileNotFoundError as e:
+                raise ValueError("A macro selecionada não existe mais.") from e
+        self.log(f"Macro '{safe_name}' excluída.", "info")
+        return self.list_macros()
+
+    def _focus_game_window(self):
+        windows = self._find_game_windows()
+        window = next((w for w in windows if not w.isMinimized), windows[0] if windows else None)
+        if not window:
+            raise RuntimeError(f"Janela '{self.config['window_title']}' não encontrada.")
+        try:
+            if window.isMinimized:
+                window.restore()
+            window.activate()
+        except Exception as e:
+            raise RuntimeError(f"Não consegui trazer o jogo para frente: {e}") from e
+        deadline = time.monotonic() + 1.0
+        while time.monotonic() < deadline and not self._game_focused():
+            time.sleep(0.05)
+        if not self._game_focused():
+            raise RuntimeError("O jogo não ficou em primeiro plano.")
+
+    def start_macro_recording(self, name, max_seconds=None):
+        if not str(name or "").strip():
+            raise ValueError("Digite um nome para a macro.")
+        name = _safe_name(name)
+        duration = float(max_seconds if max_seconds is not None else self.config["macro"]["max_seconds"])
+        if not 1 <= duration <= 600:
+            raise ValueError("A duração deve ficar entre 1 e 600 segundos.")
+        if self.any_running():
+            raise RuntimeError("Pare os módulos do bot antes de gravar, para não registrar ações automáticas.")
+        if not self._ensure_interception():
+            raise RuntimeError("O driver Interception não está disponível.")
+        with self._macro_lock:
+            if self._macro_recording or self._macro_playing:
+                raise RuntimeError("Já existe uma gravação ou reprodução em andamento.")
+        self._focus_game_window()
+        stop = threading.Event()
+        with self._macro_lock:
+            self._macro_recording = True
+            self._macro_record_stop = stop
+            self._macro_record_started = time.monotonic()
+            self._macro_record_duration = duration
+            self._macro_record_name = name
+            self._macro_actions = []
+        self.config["macro"]["max_seconds"] = duration
+        self.save_config(self.config, quiet=True)
+        thread = threading.Thread(target=self._record_macro, args=(stop,), daemon=True, name="macro-record")
+        self._macro_record_thread = thread
+        thread.start()
+        self.log(f"Gravando '{name}' por até {int(duration)} s.", "success")
+        return self.macro_state()
+
+    def _record_macro(self, stop):
+        watched = set(MACRO_KEYS) | set(MACRO_MOUSE_BUTTONS)
+        watched.discard(VK_CODES.get(str(self.config.get("stop_hotkey", "F12")).upper()))
+        previous = set()
+        started = time.monotonic()
+        actions = []
+        try:
+            while not stop.is_set() and time.monotonic() - started < self._macro_record_duration:
+                current = {vk for vk in watched if _user32.GetAsyncKeyState(vk) & 0x8000}
+                if self._game_focused():
+                    elapsed = round((time.monotonic() - started) * 1000)
+                    for vk in sorted(current - previous):
+                        if vk in MACRO_KEYS:
+                            actions.append({"t": elapsed, "type": "press", "key": MACRO_KEYS[vk]})
+                        elif vk in MACRO_MOUSE_BUTTONS and pg is not None:
+                            x, y = pg.position()
+                            dx, dy = self._offset()
+                            actions.append({"t": elapsed, "type": "click", "x": int(x - dx), "y": int(y - dy)})
+                        if len(actions) >= MAX_MACRO_ACTIONS:
+                            self.log("Limite de ações atingido; encerrando a gravação.", "warn")
+                            stop.set()
+                            break
+                previous = current
+                stop.wait(0.01)
+        except Exception as e:
+            self.log(f"Erro durante a gravação: {e}", "error")
+        finally:
+            with self._macro_lock:
+                name = self._macro_record_name
+                self._macro_actions = actions
+            if actions:
+                try:
+                    self.macros_dir.mkdir(parents=True, exist_ok=True)
+                    path = self.macros_dir / f"{name}.json"
+                    temp = path.with_suffix(".tmp")
+                    with temp.open("w", encoding="utf-8") as f:
+                        json.dump({"version": 1, "actions": actions}, f, ensure_ascii=False, indent=2)
+                    temp.replace(path)
+                    self.log(f"Macro '{name}' salva com {len(actions)} ações.", "success")
+                except OSError as e:
+                    self.log(f"Não consegui salvar a macro: {e}", "error")
+            else:
+                self.log("Nenhuma ação foi gravada; a macro anterior foi mantida.", "warn")
+            with self._macro_lock:
+                self._macro_recording = False
+                self._macro_record_stop = None
+                self._macro_record_thread = None
+
+    def stop_macro_recording(self):
+        with self._macro_lock:
+            stop = self._macro_record_stop
+            thread = self._macro_record_thread
+        if stop:
+            stop.set()
+        if thread and thread is not threading.current_thread():
+            thread.join(timeout=3)
+        return self.macro_state()
+
+    def play_macro(self, name):
+        safe_name = _safe_name(name)
+        path = self.macros_dir / f"{safe_name}.json"
+        try:
+            with path.open(encoding="utf-8") as f:
+                data = json.load(f)
+        except FileNotFoundError as e:
+            raise ValueError("Macro não encontrada.") from e
+        actions = data.get("actions") if isinstance(data, dict) else data
+        if not isinstance(actions, list) or not actions or len(actions) > MAX_MACRO_ACTIONS:
+            raise ValueError("A macro está vazia ou tem formato inválido.")
+        last_time = -1
+        for action in actions:
+            if not isinstance(action, dict) or action.get("type") not in ("press", "click"):
+                raise ValueError("A macro contém uma ação inválida.")
+            at = action.get("t")
+            if not isinstance(at, (int, float)) or at < last_time or at < 0:
+                raise ValueError("Os tempos da macro estão inválidos.")
+            last_time = at
+            if action["type"] == "press" and action.get("key") not in MACRO_KEYS.values():
+                raise ValueError("A macro contém uma tecla não suportada.")
+            if action["type"] == "click" and any(
+                not isinstance(action.get(k), int) or not 0 <= action[k] <= 32767 for k in ("x", "y")
+            ):
+                raise ValueError("A macro contém coordenadas inválidas.")
+        if self.any_running():
+            raise RuntimeError("Pare os módulos do bot antes de reproduzir a macro.")
+        if not self._ensure_interception():
+            raise RuntimeError("O driver Interception não está disponível.")
+        with self._macro_lock:
+            if self._macro_recording or self._macro_playing:
+                raise RuntimeError("Já existe uma gravação ou reprodução em andamento.")
+        self._focus_game_window()
+        stop = threading.Event()
+        with self._macro_lock:
+            self._macro_playing = True
+            self._macro_play_stop = stop
+        thread = threading.Thread(target=self._play_macro, args=(stop, safe_name, actions), daemon=True, name="macro-play")
+        self._macro_play_thread = thread
+        thread.start()
+        return self.macro_state()
+
+    def _play_macro(self, stop, name, actions):
+        last_time = 0
+        try:
+            for action in actions:
+                if stop.wait(max(0, (action["t"] - last_time) / 1000)):
+                    break
+                if self.config["safety"].get("pause_unfocused", True):
+                    while not stop.is_set() and not self._game_focused():
+                        stop.wait(0.1)
+                if stop.is_set():
+                    break
+                if action["type"] == "press":
+                    ic.press(action["key"])
+                else:
+                    x, y = self._abs_point((action["x"], action["y"]))
+                    self._click(x, y)
+                last_time = action["t"]
+            self.log(f"Macro '{name}' {'interrompida' if stop.is_set() else 'reproduzida'}.", "info")
+        except Exception as e:
+            self.log(f"Erro ao reproduzir macro '{name}': {e}", "error")
+        finally:
+            with self._macro_lock:
+                self._macro_playing = False
+                self._macro_play_stop = None
+                self._macro_play_thread = None
+
+    def stop_macro_playback(self):
+        with self._macro_lock:
+            stop = self._macro_play_stop
+        if stop:
+            stop.set()
+        return self.macro_state()
+
+    # ---------- troca de pokémon ----------
+    def add_switch_slot(self, name):
+        name = str(name or "").strip()[:40]
+        if not name:
+            raise ValueError("Digite o nome do pokémon ou do atalho.")
+        slots = self.config["switch"]["slots"]
+        slot = {"id": f"{time.time_ns():x}-{len(slots):x}", "name": name, "point": None}
+        slots.append(slot)
+        self.save_config(self.config, quiet=True)
+        return copy.deepcopy(slot)
+
+    def set_switch_slot_point(self, slot_id, x, y):
+        point = [int(x), int(y)]
+        if any(value < 0 or value > 32767 for value in point):
+            raise ValueError("Coordenadas inválidas.")
+        slot = next((s for s in self.config["switch"]["slots"] if s["id"] == slot_id), None)
+        if not slot:
+            raise ValueError("Posição de troca não encontrada.")
+        slot["point"] = point
+        self.save_config(self.config, quiet=True)
+        return copy.deepcopy(slot)
+
+    def remove_switch_slot(self, slot_id):
+        slots = self.config["switch"]["slots"]
+        self.config["switch"]["slots"] = [s for s in slots if s["id"] != slot_id]
+        self.save_config(self.config, quiet=True)
+
+    def click_switch_slot(self, slot_id):
+        slot = next((s for s in self.config["switch"]["slots"] if s["id"] == slot_id), None)
+        if not slot or not slot.get("point"):
+            raise ValueError("Marque a posição desse pokémon no jogo primeiro.")
+        if self.is_running("switch"):
+            raise RuntimeError("Desative a troca automática antes de trocar manualmente.")
+        if self.macro_state()["recording"] or self.macro_state()["playing"]:
+            raise RuntimeError("Pare a gravação ou reprodução antes de trocar.")
+        if not self._ensure_interception():
+            raise RuntimeError("O driver Interception não está disponível.")
+        self._focus_game_window()
+        x, y = self._abs_point(slot["point"])
+        self._click(x, y)
+        self.log(f"Clique de troca enviado: {slot['name']}.", "success")
         return True
