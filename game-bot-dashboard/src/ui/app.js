@@ -3,12 +3,14 @@ const DESCRIPTIONS = {
   capture: "Procura os pokémons marcados e joga a pokébola.",
   cavebot: "Anda pela rota do minimapa, luta e captura.",
   heal: "Aperta a tecla de cura quando sua vida cai.",
+  switch: "Alterna entre os pokémon configurados no intervalo escolhido.",
 };
 const PICK_TARGETS = {
   "cavebot.map_region": "Área do minimapa",
   "capture.region": "Área de captura",
   "cavebot.hp_pixel": "Pixel da vida do inimigo",
   "heal.pixel": "Pixel da sua vida",
+  switch_slot: "Posição de troca",
   new_pokemon: "Recortar pokémon da tela",
   new_waypoint: "Recortar ponto do minimapa",
   "heal.faint_pixel": "Começo da barra do seu pokémon",
@@ -24,6 +26,7 @@ let lastSeq = 0;
 let pickKey = "F8";
 let pickHandled = null;
 let pendingPokemonName = "";
+let macroWasRecording = false;
 let timerEditing = false;
 const moduleEls = {};
 
@@ -193,6 +196,7 @@ async function poll() {
     drv.textContent = s.health.driver ? "Driver OK" : "Driver ausente";
 
     renderTimer(s.timer);
+    renderMacroState(s.macro);
     handlePick(s.pick);
   } catch (e) {
     console.error(e);
@@ -277,7 +281,8 @@ async function handlePick(pick) {
   }
 
   banner.hidden = false;
-  $("#pick-title").textContent = PICK_TARGETS[pick.target] || "Calibrando";
+  const targetName = pick.target.startsWith("switch_slot:") ? "switch_slot" : pick.target;
+  $("#pick-title").textContent = PICK_TARGETS[targetName] || "Calibrando";
   const key = `<kbd class="k">${pickKey}</kbd>`;
   $("#pick-help").innerHTML =
     pick.kind === "point"
@@ -294,6 +299,14 @@ async function handlePick(pick) {
 }
 
 async function applyPick(target, result) {
+  if (target.startsWith("switch_slot:")) {
+    const slotId = target.slice("switch_slot:".length);
+    await call("set_switch_slot_point", slotId, result.x, result.y);
+    config = await api.get_config();
+    renderSwitchSlots();
+    toast("Posição de troca salva");
+    return;
+  }
   if (target === "new_pokemon") {
     const added = await call("add_pokemon_from_region", pendingPokemonName, result.region);
     await afterPokemonAdded(added);
@@ -471,6 +484,7 @@ function applyConfig() {
     $(".bell", t).classList.toggle("on", config.capture.alert_on.includes(t.dataset.name));
   }
   buildRoute();
+  renderSwitchSlots();
   renderProfiles();
 }
 
@@ -1073,6 +1087,48 @@ function wireUi() {
     });
   }
   $("#add-waypoint").addEventListener("click", openAddWaypoint);
+  $("#macro-select").addEventListener("change", () => {
+    if ($("#macro-select").value) $("#macro-name").value = $("#macro-select").value;
+  });
+  $("#macro-record").addEventListener("click", async () => {
+    const name = $("#macro-name").value.trim();
+    const duration = Number($("#macro-duration").value);
+    if (!name) return toast("Digite um nome para a macro", true);
+    const normalized = name.toLowerCase().replace(/[^\p{L}\p{N}_ -]/gu, "").trim().replace(/\s+/g, "_") || "pokemon";
+    const existing = await call("list_macros").catch(() => []);
+    if (existing.includes(normalized) && !confirm(`A macro "${normalized}" já existe. Substituir?`)) return;
+    await call("start_macro_recording", name, duration);
+    toast("Gravação iniciada; execute as ações no jogo");
+  });
+  $("#macro-stop-record").addEventListener("click", async () => {
+    const state = await call("stop_macro_recording");
+    await renderMacroList(state.name);
+  });
+  $("#macro-play").addEventListener("click", async () => {
+    const name = $("#macro-select").value;
+    if (!name) return toast("Selecione uma macro", true);
+    await call("play_macro", name);
+    toast(`Reproduzindo ${name}`);
+  });
+  $("#macro-stop-play").addEventListener("click", () => call("stop_macro_playback"));
+  $("#macro-delete").addEventListener("click", async () => {
+    const name = $("#macro-select").value;
+    if (!name) return toast("Selecione uma macro", true);
+    if (!confirm(`Excluir a macro "${name}" permanentemente?`)) return;
+    await call("delete_macro", name);
+    await renderMacroList();
+    if ($("#macro-name").value === name) $("#macro-name").value = "";
+    toast(`Macro "${name}" excluída`);
+  });
+  $("#switch-add").addEventListener("click", async () => {
+    const name = $("#switch-name").value.trim();
+    if (!name) return toast("Digite um nome para a posição", true);
+    const slot = await call("add_switch_slot", name);
+    config = await api.get_config();
+    $("#switch-name").value = "";
+    renderSwitchSlots();
+    await startPick("point", `switch_slot:${slot.id}`);
+  });
   $("#ref-set").addEventListener("click", async () => {
     config = await call("set_window_ref");
     renderWindowRef();
@@ -1142,6 +1198,82 @@ function wireUi() {
   wireTimer();
 }
 
+async function renderMacroList(selected) {
+  const select = $("#macro-select");
+  const current = selected ?? select.value;
+  const names = await call("list_macros").catch(() => []);
+  select.replaceChildren();
+  if (!names.length) {
+    const option = el("option", null, "Nenhuma macro salva");
+    option.value = "";
+    select.append(option);
+  } else {
+    for (const name of names) {
+      const option = el("option", null, name);
+      option.value = name;
+      select.append(option);
+    }
+  }
+  select.value = names.includes(current) ? current : (names[0] || "");
+  select.disabled = !names.length;
+  $("#macro-play").disabled = !select.value;
+  $("#macro-delete").disabled = !select.value;
+}
+
+function renderMacroState(state) {
+  if (!state) return;
+  $("#macro-record").disabled = state.recording || state.playing;
+  $("#macro-stop-record").disabled = !state.recording;
+  $("#macro-play").disabled = state.recording || state.playing || !$("#macro-select").value;
+  $("#macro-stop-play").disabled = !state.playing;
+  $("#macro-delete").disabled = state.recording || state.playing || !$("#macro-select").value;
+  const status = $("#macro-status");
+  if (state.recording) {
+    status.textContent = `Gravando ${state.name}: ${Math.ceil(state.duration - state.elapsed)} s restantes.`;
+  } else if (state.playing) {
+    status.textContent = `Reproduzindo ${$("#macro-select").value || "macro"} no jogo.`;
+  } else {
+    status.textContent = "Nenhuma gravação ou reprodução em andamento.";
+  }
+  if (macroWasRecording && !state.recording) renderMacroList(state.name);
+  macroWasRecording = Boolean(state.recording);
+}
+
+function renderSwitchSlots() {
+  const list = $("#switch-list");
+  list.replaceChildren();
+  const slots = config.switch?.slots || [];
+  if (!slots.length) {
+    list.append(el("p", "hint", "Nenhuma posição configurada."));
+    return;
+  }
+  for (const slot of slots) {
+    const row = el("div", "switch-row");
+    const name = el("strong", "switch-name", slot.name);
+    const point = el("span", "switch-point mono", slot.point ? slot.point.join(", ") : "posição não marcada");
+    const mark = el("button", "btn ghost small", "Marcar");
+    mark.type = "button";
+    mark.addEventListener("click", () => startPick("point", `switch_slot:${slot.id}`));
+    const click = el("button", "btn small", "Trocar");
+    click.type = "button";
+    click.disabled = !slot.point;
+    click.addEventListener("click", async () => {
+      await call("click_switch_slot", slot.id);
+      toast(`Clique enviado: ${slot.name}`);
+    });
+    const remove = el("button", "btn ghost small", "Remover");
+    remove.type = "button";
+    remove.addEventListener("click", async () => {
+      if (!confirm(`Remover a posição "${slot.name}"?`)) return;
+      await call("remove_switch_slot", slot.id);
+      config = await api.get_config();
+      renderSwitchSlots();
+    });
+    row.append(name, point, mark, click, remove);
+    list.append(row);
+  }
+}
+
 async function init() {
   api = window.pywebview.api;
   config = await api.get_config();
@@ -1153,6 +1285,7 @@ async function init() {
   renderMessages();
   buildMascotSelect();
   wireRouteDnD();
+  await renderMacroList();
   applyConfig();
   wireUi();
   poll();

@@ -77,7 +77,9 @@ class API:
 
     # estado e módulos
     def get_state(self, since=0):
-        return self._engine.state(since)
+        state = self._engine.state(since)
+        state["macro"] = self._engine.macro_state()
+        return state
 
     def toggle_module(self, name, state):
         if state:
@@ -176,6 +178,37 @@ class API:
 
     def clear_pick(self):
         self._engine.clear_pick()
+
+    # macros
+    def list_macros(self):
+        return self._engine.list_macros()
+
+    def delete_macro(self, name):
+        return self._engine.delete_macro(name)
+    def start_macro_recording(self, name, duration):
+        return self._engine.start_macro_recording(name, duration)
+
+    def stop_macro_recording(self):
+        return self._engine.stop_macro_recording()
+
+    def play_macro(self, name):
+        return self._engine.play_macro(name)
+
+    def stop_macro_playback(self):
+        return self._engine.stop_macro_playback()
+
+    # troca de pokémon
+    def add_switch_slot(self, name):
+        return self._engine.add_switch_slot(name)
+
+    def set_switch_slot_point(self, slot_id, x, y):
+        return self._engine.set_switch_slot_point(slot_id, x, y)
+
+    def remove_switch_slot(self, slot_id):
+        return self._engine.remove_switch_slot(slot_id)
+
+    def click_switch_slot(self, slot_id):
+        return self._engine.click_switch_slot(slot_id)
 
     def test_detection(self, kind):
         return self._engine.test_detection(kind)

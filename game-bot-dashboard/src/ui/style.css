@@ -470,3 +470,11 @@ body.compact .pick-banner { flex-wrap: wrap; padding: 8px 10px; gap: 8px; }
   border: 1px dashed var(--line); border-radius: 9px; background: var(--surface-2); font-size: 12.5px;
 }
 .success-preview img { max-height: 40px; max-width: 320px; image-rendering: pixelated; display: block; }
+
+/* ---------- aba Ações: macros e troca de pokémon ---------- */
+.switch-list { display: flex; flex-direction: column; gap: 6px; margin: 12px 0 18px; max-width: 760px; }
+.switch-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); background: var(--surface-2); border-radius: 9px; }
+.switch-name { flex: 1 1 120px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.switch-point { flex: 1 1 120px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+#macro-select { max-width: 220px; min-width: 150px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; }
+#macro-status { margin: 12px 0 18px; }

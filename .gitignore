@@ -11,3 +11,10 @@ logs/
 game-bot-dashboard/build/
 game-bot-dashboard/dist/
 *.spec
+
+# Dados pessoais de cada PC
+perfis/
+macros/
+imags/mascotes/
+*.bak
+*.orig
