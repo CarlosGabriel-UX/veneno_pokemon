@@ -3,7 +3,6 @@
 Bot para otPokemon (Windows) com painel gráfico: liga e desliga batalha, captura, cavebot e cura sem usar o terminal.
 
 - **Painel**: veja [`game-bot-dashboard/`](game-bot-dashboard/README.md). Para gerar o `.exe`, dê dois cliques em `game-bot-dashboard/build.bat`.
-- **Scripts originais** (rodam no terminal): `battle.py`, `captura.py`, `cave bot.py`, `opacity.py`
 - **Imagens** usadas na detecção: `imags/` (`battle/`, `captura/`, `map/`)
 
 Projeto original: [Lis-Alon/Veneno_do_pokemon](https://github.com/Lis-Alon/Veneno_do_pokemon).
@@ -47,7 +46,7 @@ cd veneno_pokemon
 
 Sem Git: no GitHub, clique em **Code > Download ZIP**, extraia e abra o `cmd` dentro da pasta extraída.
 
-### 4. Rode o painel (recomendado)
+### 4. Rode o painel
 
 O painel tem todos os módulos (batalha, captura, cavebot e cura) com botões para ligar e desligar.
 
@@ -69,25 +68,6 @@ Os indicadores **Jogo** e **Driver** no topo do painel mostram se a janela foi e
 
 Dê dois cliques em `game-bot-dashboard\build.bat`. Ele instala o que falta, gera `game-bot-dashboard\dist\VenenoBot\VenenoBot.exe` e copia a pasta `imags` para junto. Para levar para outro PC, compacte a pasta `dist\VenenoBot` inteira (o outro PC também precisa do driver do passo 2).
 
-### Scripts originais (opcional)
-
-Os scripts da raiz fazem uma coisa cada e não têm painel. Instale as dependências e rode a partir da raiz do projeto:
-
-```
-pip install -r requirements.txt
-python battle.py
-python captura.py
-python "cave bot.py"
-python opacity.py 200
-```
-
-- O `cave bot.py` faz um ciclo só: anda até o próximo ícone do mapa, luta até a battle ficar vazia, captura os corpos e segue a rota.
-- As coordenadas, teclas, Pokémon-alvo e a rota vêm do `config.json` que o painel salva na raiz do projeto. Marque tudo uma vez em **Ajustes** no painel e os scripts passam a usar os mesmos valores. Sem `config.json`, valem os padrões de um monitor 1920x1080 (em `config_bot.py`).
-- Os scripts usam as coordenadas como foram marcadas, então não mova a janela do jogo depois de marcar.
-- O `memory_bank.py` guarda estado, capturas e estatísticas em `memory_bank.db`, na raiz.
-- Para parar um script, feche o terminal ou aperte `Ctrl+C`.
-- O `teste captcha.py` precisa de `torch`, `torchvision` e `scipy`, que são pacotes grandes. Só instale com `pip install -r requirements-captcha.txt` se for usar esse teste.
-
 ### Problemas comuns
 
 | Sintoma | O que fazer |
@@ -96,4 +76,3 @@ python opacity.py 200
 | `interception não carregou` ou indicador **Driver** vermelho | Instale o driver (passo 2) como administrador e reinicie o PC. |
 | `Janela '...' não encontrada` | Abra o jogo e confira o título da janela em **Ajustes**. |
 | O bot não acha nada na tela | Deixe o jogo visível e em primeiro plano; os módulos pausam quando o jogo está atrás de outra janela. |
-| Script dá erro de arquivo de imagem | Rode o script de dentro da pasta raiz do projeto. |

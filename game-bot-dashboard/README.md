@@ -4,10 +4,10 @@ Janela para ligar e desligar o bot sem usar o terminal.
 
 ## O que tem
 
-**Módulos** (mesma lógica dos scripts da raiz)
-- **Batalha**: ataca (`e`, `q`) quando aparece inimigo (`battle.py`)
-- **Captura**: procura os pokémons marcados e joga a pokébola (`captura.py`)
-- **Cavebot**: segue a rota do minimapa, luta e captura (`cave bot.py`)
+**Módulos**
+- **Batalha**: ataca (`e`, `q`) quando aparece inimigo
+- **Captura**: procura os pokémons marcados e joga a pokébola
+- **Cavebot**: segue a rota do minimapa, luta e captura
 - **Cura**: aperta a tecla de cura quando um pixel da barra de vida do seu pokémon muda de cor
 - **Parar tudo**: botão no topo ou **F12** (configurável); cada módulo também pode ter um atalho próprio
 
@@ -49,7 +49,7 @@ Ficam na raiz do repositório (ou ao lado do `.exe`):
 | `perfis/*.json` | perfis salvos |
 | `estatisticas.db` | histórico de batalhas e pokébolas |
 | `logs/*.txt` | log de cada dia |
-| `imags/captura/removidos/` | pokémons removidos pelo painel (dá pra devolver) |
+| `imags/captura/removidos/`, `imags/map/removidos/` | pokémons e pontos removidos pelo painel (dá pra devolver movendo de volta) |
 
 ## Rodar pelo código
 
@@ -58,7 +58,7 @@ pip install -r requirements.txt
 python src/main.py
 ```
 
-O driver do [Interception](https://github.com/oblitum/Interception) precisa estar instalado, igual nos scripts originais.
+O driver do [Interception](https://github.com/oblitum/Interception) precisa estar instalado (veja o passo 2 do README principal).
 
 ## Gerar o .exe
 
