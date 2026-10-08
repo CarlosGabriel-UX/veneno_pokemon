@@ -344,7 +344,6 @@ class BotEngine:
         self._macro_actions = []
         self._macro_playing = False
         self._macro_play_stop = None
-        self._macro_play_thread = None
 
         threading.Thread(target=self._hotkey_watcher, daemon=True).start()
         threading.Thread(target=self._health_watcher, daemon=True).start()
@@ -616,7 +615,7 @@ class BotEngine:
 
     # ---------- imagens ----------
     def capture_images(self):
-        return sorted(p.name for p in (self.img / "captura").glob("*.png") if p.name != "tela.png")
+        return sorted(p.name for p in (self.img / "captura").glob("*.png"))
 
     def map_waypoints(self):
         files = [p for p in (self.img / "map").glob("*.png") if p.stem.isdigit()]
@@ -1438,7 +1437,6 @@ class BotEngine:
             self._macro_playing = True
             self._macro_play_stop = stop
         thread = threading.Thread(target=self._play_macro, args=(stop, safe_name, actions), daemon=True, name="macro-play")
-        self._macro_play_thread = thread
         thread.start()
         return self.macro_state()
 
@@ -1466,7 +1464,6 @@ class BotEngine:
             with self._macro_lock:
                 self._macro_playing = False
                 self._macro_play_stop = None
-                self._macro_play_thread = None
 
     def stop_macro_playback(self):
         with self._macro_lock:

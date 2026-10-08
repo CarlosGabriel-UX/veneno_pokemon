@@ -1,6 +1,0 @@
-interception-python==1.13.6
-opencv-python
-pyautogui
-pillow
-pywin32
-pygetwindow
