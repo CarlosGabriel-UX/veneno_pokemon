@@ -10,12 +10,9 @@ const PICK_TARGETS = {
   "capture.region": "Área de captura",
   "cavebot.hp_pixel": "Pixel da vida do inimigo",
   "heal.pixel": "Pixel da sua vida",
-  switch_slot: "Posição de troca",
   new_pokemon: "Recortar pokémon da tela",
   new_waypoint: "Recortar ponto do minimapa",
-  "heal.faint_pixel": "Começo da barra do seu pokémon",
-  msg_success: "Recortar mensagem de captura",
-  msg_noball: "Recortar mensagem de sem pokébola",
+  switch_slot: "Posição de troca",
 };
 const FKEYS = Array.from({ length: 12 }, (_, i) => `F${i + 1}`);
 
@@ -95,7 +92,7 @@ function buildModules(modules) {
   for (const [name, label] of Object.entries(modules)) {
     const node = tpl.content.firstElementChild.cloneNode(true);
     $(".m-name", node).textContent = label;
-    node.title = DESCRIPTIONS[name] || "";
+    $(".m-desc", node).textContent = DESCRIPTIONS[name] || "";
     const input = $("input", node);
     input.setAttribute("aria-label", `Ligar ${label}`);
     input.addEventListener("change", async () => {
@@ -103,7 +100,7 @@ function buildModules(modules) {
       if (input.checked && !ok) input.checked = false;
     });
     $("#modules").append(node);
-    moduleEls[name] = { node, input, label, text: $(".m-text", node), key: $(".m-key", node), time: $(".m-time", node) };
+    moduleEls[name] = { node, input, label, text: $(".m-text", node), key: $(".m-key", node) };
   }
 
   // filtros do console e campos de atalho seguem a lista de módulos
@@ -141,12 +138,6 @@ function appendLogs(logs) {
     box.append(row);
   }
   while (box.childElementCount > 800) box.firstElementChild.remove();
-  const last = logs[logs.length - 1];
-  const said = [...logs].reverse().find((l) => l.module && ["success", "error", "warn"].includes(l.level));
-  if (said) mascotSay(said);
-  const sb = $("#sb-last");
-  sb.className = `sb-last full-only ${last.level}`;
-  sb.textContent = `${last.time}  ${last.module ? `[${moduleEls[last.module]?.label || last.module}] ` : ""}${last.msg}`;
   applyLogFilter();
   if (stick) box.scrollTop = box.scrollHeight;
 }
@@ -170,21 +161,15 @@ async function poll() {
       m.node.classList.toggle("running", running);
       if (document.activeElement !== m.input) m.input.checked = running;
       m.text.textContent = running ? s.status[name] : "Parado";
-      m.time.textContent = running && s.uptime?.[name] != null ? fmtDuration(s.uptime[name]) : "";
     }
     const pill = $("#status-pill");
     pill.classList.toggle("on", count > 0);
-    document.body.classList.toggle("busy", count > 0);
     pill.textContent = count === 0 ? "Parado" : count === 1 ? "1 rodando" : `${count} rodando`;
-    const names = Object.entries(moduleEls).filter(([n]) => s.running[n]).map(([, m]) => m.label);
-    const sbRun = $("#sb-running");
-    sbRun.classList.toggle("on", count > 0);
-    sbRun.textContent = count ? `Rodando: ${names.join(", ")}` : "Nada rodando";
 
     const game = $("#h-game");
     game.classList.toggle("ok", s.health.game && s.health.focused);
     game.classList.toggle("warn", s.health.game && !s.health.focused);
-    game.textContent = !s.health.game ? "Jogo fechado" : s.health.focused ? "Jogo em foco" : "Jogo fora de foco";
+    game.textContent = s.health.game && !s.health.focused ? "Jogo (fora de foco)" : "Jogo";
     game.title = !s.health.game
       ? `Janela "${config.window_title}" não encontrada`
       : s.health.focused
@@ -193,7 +178,6 @@ async function poll() {
     const drv = $("#h-driver");
     drv.classList.toggle("ok", s.health.driver);
     drv.title = s.health.driver ? "Driver Interception OK" : "Driver Interception não encontrado";
-    drv.textContent = s.health.driver ? "Driver OK" : "Driver ausente";
 
     renderTimer(s.timer);
     renderMacroState(s.macro);
@@ -209,33 +193,16 @@ async function poll() {
 function renderTimer(left) {
   const out = $("#timer-left");
   out.textContent = left == null ? "" : fmtDuration(left);
-  $("#sb-timer").hidden = left == null;
-  $("#sb-timer").textContent = left == null ? "" : `Timer: ${fmtDuration(left)}`;
   $("#timer-desc").textContent = left == null ? "Desliga tudo sozinho." : "Desliga tudo em";
-  const sel = $("#timer-select");
-  if (timerEditing) return;
-  // a caixa sempre mostra o que está valendo: sem timer = Desligado; com timer = a hora em que desliga
-  let active = $("option[value=active]", sel);
-  if (left == null) {
-    active?.remove();
-    if (sel.value && sel.value !== "at") sel.value = "";
-    return;
+  if (left == null && !timerEditing && $("#timer-select").value && $("#timer-select").value !== "at") {
+    $("#timer-select").value = "";
   }
-  if (!active) {
-    active = Object.assign(el("option"), { value: "active" });
-    sel.append(active);
-  }
-  const end = new Date(Date.now() + left * 1000);
-  active.textContent = `Às ${end.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
-  if (sel.value !== "active") sel.value = "active";
-  $("#timer-at").hidden = true;
 }
 
 function wireTimer() {
   const sel = $("#timer-select");
   const at = $("#timer-at");
   sel.addEventListener("change", async () => {
-    if (sel.value === "active") return;
     at.hidden = sel.value !== "at";
     if (sel.value === "at") {
       timerEditing = true;
@@ -312,17 +279,10 @@ async function applyPick(target, result) {
     await afterPokemonAdded(added);
     return;
   }
-  if (target.startsWith("msg_")) {
-    await call("set_message_image", target.slice(4), result.region);
-    await refreshImages();
-    toast("Mensagem salva");
-    return;
-  }
   if (target === "new_waypoint") {
     const added = await call("add_waypoint_from_region", result.region);
     config = await api.get_config();
     await refreshImages();
-    // ponto novo entra ligado no fim da rota
     const row = $(`#route .rt[data-name="${CSS.escape(added)}"]`);
     if (row) {
       $("input[type=checkbox]", row).checked = true;
@@ -338,18 +298,13 @@ async function applyPick(target, result) {
   if (result.region) input.value = result.region.join(", ");
   else {
     input.value = `${result.x}, ${result.y}`;
-    const colorPath = {
-      "cavebot.hp_pixel": "cavebot.hp_color",
-      "heal.pixel": "heal.color",
-      "heal.faint_pixel": "heal.faint_color",
-    }[target];
+    const colorPath = { "cavebot.hp_pixel": "cavebot.hp_color", "heal.pixel": "heal.color" }[target];
     if (colorPath) $(`[data-path="${colorPath}"]`).value = result.rgb.join(", ");
   }
   config = { ...config, window_ref: (await api.get_config()).window_ref };
   updateSwatches();
   await save(`Salvo: ${PICK_TARGETS[target].toLowerCase()}`);
 }
-
 function updateSwatches() {
   for (const sw of $$("[data-swatch]")) {
     const v = $(`[data-path="${sw.dataset.swatch}"]`).value.split(/[,\s]+/).filter(Boolean).map(Number);
@@ -380,101 +335,6 @@ function fillForm() {
   }
   updateSwatches();
   renderWindowRef();
-  applyTheme(config.theme);
-  renderMascot();
-  renderGroupSummaries();
-}
-
-// ---------- mascote ----------
-const BUILTIN_MASCOTS = { roxa: "Garota roxa", verde: "Garota verde", azul: "Garota azul" };
-const THEME_MASCOT = { roxo: "roxa", verde: "verde", azul: "azul" };
-let bubbleTimer = null;
-
-function mascotSrc(choice) {
-  if (choice === "auto") choice = THEME_MASCOT[document.body.dataset.theme] || "roxa";
-  if (BUILTIN_MASCOTS[choice]) return `mascotes/${choice}.svg`;
-  return images?.mascots?.find((m) => m.name === choice)?.src || null;
-}
-
-function buildMascotSelect() {
-  const sel = $("#mascot-select");
-  const opts = [["auto", "Automática (combina com a cor)"], ["", "Nenhuma"], ...Object.entries(BUILTIN_MASCOTS)];
-  for (const m of images?.mascots || []) opts.push([m.name, m.name.replace(/\.[^.]+$/, "")]);
-  sel.replaceChildren(...opts.map(([v, t]) => Object.assign(el("option", null, t), { value: v })));
-  sel.value = config?.mascot ?? "auto";
-  if (sel.selectedIndex < 0) sel.value = "auto";
-}
-
-function renderMascot(choice) {
-  if ($("#mascot-select").selectedIndex < 0) $("#mascot-select").value = "auto"; // imagem apagada da pasta
-  choice ??= $("#mascot-select").value;
-  const src = choice ? mascotSrc(choice) : null;
-  const mode = $("#mascot-mode").value;
-  const big = mode === "fundo" || mode === "tela";
-  const opacity = Number($("#mascot-opacity").value) || 50;
-  $("#mascot").hidden = !src || big;
-  $("#mascot-bg").hidden = !src || !big;
-  document.body.classList.toggle("mascot-big", Boolean(src) && big);
-  $("#mascot-opacity-field").hidden = !big;
-  $("#mascot-opacity-value").textContent = `${opacity}%`;
-  $("#mascot-bg").style.opacity = opacity / 100;
-  $("#mascot-bg").classList.toggle("cover", mode === "tela");
-  for (const img of [$("#mascot-img"), $("#mascot-bg-img")]) {
-    if (src && img.getAttribute("src") !== src) img.src = src;
-  }
-}
-
-// a mascote comenta capturas, alertas e erros num balão por alguns segundos
-function mascotSay(log) {
-  if ($("#mascot").hidden || !["success", "error", "warn"].includes(log.level) || !log.module) return;
-  const bubble = $("#mascot-bubble");
-  bubble.textContent = log.msg;
-  bubble.className = `bubble ${log.level}`;
-  bubble.hidden = false;
-  clearTimeout(bubbleTimer);
-  bubbleTimer = setTimeout(() => (bubble.hidden = true), 5000);
-}
-
-function applyTheme(theme) {
-  document.body.dataset.theme = ["roxo", "verde", "azul"].includes(theme) ? theme : "roxo";
-}
-
-// Resumo que aparece no título de cada grupo de Ajustes, para não precisar abrir.
-function renderGroupSummaries() {
-  const c = config;
-  const keys = Object.entries(c.hotkeys || {}).filter(([, k]) => k).map(([n, k]) => `${moduleEls[n]?.label || n} ${k}`);
-  const sums = {
-    profiles: c.profile ? `Perfil atual: ${c.profile}` : "Nenhum perfil carregado",
-    coords: `Minimapa ${c.cavebot.map_region.join(", ")} · vida do inimigo ${c.cavebot.hp_pixel.join(", ")}`,
-    heal:
-      (c.heal.pixel?.length === 2 ? `Tecla ${String(c.heal.key).toUpperCase()} · pixel ${c.heal.pixel.join(", ")}` : "Não configurada") +
-      (c.heal.faint_pixel?.length === 2 ? " · vigia desmaio" : ""),
-    safety: `Luta até ${c.safety.fight_timeout || "∞"}s · tolerância ${c.safety.color_tolerance ?? 30}${c.safety.pause_unfocused ? " · pausa fora de foco" : ""}`,
-    hotkeys: `Parar tudo ${c.stop_hotkey}${keys.length ? " · " + keys.join(", ") : ""}`,
-    battle: `Teclas ${c.battle.attack_keys.join(", ")} · a cada ${c.battle.interval}s`,
-    general: c.window_title,
-  };
-  for (const [k, v] of Object.entries(sums)) {
-    const span = $(`[data-sum="${k}"]`);
-    if (span) span.textContent = v;
-  }
-}
-
-// Lembra quais grupos de Ajustes ficaram abertos.
-function wireGroups() {
-  let open = [];
-  try {
-    open = JSON.parse(localStorage.getItem("groups-open") || "[]");
-  } catch {}
-  for (const d of $$("details.group")) {
-    d.open = open.includes(d.dataset.group);
-    d.addEventListener("toggle", () => {
-      const now = $$("details.group").filter((g) => g.open).map((g) => g.dataset.group);
-      try {
-        localStorage.setItem("groups-open", JSON.stringify(now));
-      } catch {}
-    });
-  }
 }
 
 function applyConfig() {
@@ -513,8 +373,6 @@ function validate() {
     if (nums.length !== want || nums.some(Number.isNaN)) {
       toast(`Preencha ${want} números separados por vírgula`, true);
       $$(".tab").find((t) => t.dataset.tab === "settings").click();
-      const group = input.closest("details");
-      if (group) group.open = true;
       input.focus();
       return false;
     }
@@ -586,27 +444,6 @@ async function refreshImages() {
   images = await call("get_images");
   buildCaptureGrid();
   buildRoute();
-  renderMessages();
-  const keep = $("#mascot-select").value;
-  buildMascotSelect();
-  if (keep && [...$("#mascot-select").options].some((o) => o.value === keep)) $("#mascot-select").value = keep;
-  renderMascot();
-}
-
-const MESSAGE_EMPTY = {
-  success: "Não configurada: só as pokébolas são contadas.",
-  noball: "Não configurada: o bot continua jogando mesmo sem pokébola.",
-};
-
-function renderMessages() {
-  for (const box of $$("[data-msg]")) {
-    const src = images.messages[box.dataset.msg];
-    $(".success-preview", box).replaceChildren(
-      src ? Object.assign(el("img"), { src, alt: "Mensagem do jogo" }) : el("span", "muted", MESSAGE_EMPTY[box.dataset.msg]),
-    );
-    $("[data-msg-set]", box).textContent = src ? "Recortar de novo" : "Recortar mensagem da tela";
-    $("[data-msg-remove]", box).hidden = !src;
-  }
 }
 
 function openAddPokemon() {
@@ -824,7 +661,7 @@ async function runTest(kind) {
       const hp = el("div", "callout");
       const sw = el("span", "swatch");
       sw.style.background = `rgb(${r.extra.rgb})`;
-      hp.append(sw, `Pixel da vida (${r.extra.hp_pixel.join(", ")}) está com RGB ${r.extra.rgb.join(", ")}: ${r.extra.matches ? "dentro da tolerância da cor configurada (inimigo vivo)." : "fora da tolerância da cor configurada."}`);
+      hp.append(sw, `Pixel da vida (${r.extra.hp_pixel.join(", ")}) está com RGB ${r.extra.rgb.join(", ")}: ${r.extra.matches ? "igual à cor configurada (inimigo vivo)." : "diferente da cor configurada."}`);
       body.append(hp);
     }
   }
@@ -869,14 +706,13 @@ function niceMax(v) {
 }
 
 // Barras de uma série só, eixo único começando no zero, dica ao passar o mouse.
-function barChart(box, data, { value, format, label, integer = false }) {
+function barChart(box, data, { value, format, label }) {
   const W = box.clientWidth || 360;
   const H = box.clientHeight || 150;
   const pad = { l: 34, r: 4, t: 8, b: 20 };
   const iw = W - pad.l - pad.r;
   const ih = H - pad.t - pad.b;
-  // contagens: no mínimo 2 para a linha do meio não cair em 0,5 (aparecia "1, 1, 0")
-  const max = niceMax(Math.max(integer ? 2 : 0, ...data.map(value)));
+  const max = niceMax(Math.max(...data.map(value)));
   const step = iw / data.length;
   const bw = Math.max(4, Math.min(22, step - 4));
 
@@ -938,18 +774,16 @@ async function refreshStats() {
   $("#k-time").textContent = fmtDuration(totalRun);
   $("#k-kills").textContent = s.session.kills;
   $("#k-balls").textContent = sessionBalls;
-  $("#k-caught").textContent = Object.values(s.session.caught || {}).reduce((a, b) => a + b, 0);
   $("#k-heals").textContent = s.session.heals;
   $("#k-total").textContent = totalBalls;
 
   const ballsBox = $("#chart-balls");
-  barChart(ballsBox, s.daily, { value: (d) => d.balls, format: (v) => String(Math.round(v)), label: dayLabel, integer: true });
+  barChart(ballsBox, s.daily, { value: (d) => d.balls, format: (v) => String(Math.round(v)), label: dayLabel });
   ballsBox.setAttribute("aria-label", "Pokébolas por dia: " + s.daily.map((d) => `${dayLabel(d)} ${d.balls}`).join(", "));
   const timeBox = $("#chart-time");
   barChart(timeBox, s.daily, {
     value: (d) => d.seconds / 3600,
-    // eixo em minutos abaixo de 1h (antes 0,25h virava "0.3h")
-    format: (v, axis) => (axis ? (v < 1 ? `${Math.round(v * 60)}min` : `${+v.toFixed(1)}h`) : fmtDuration(v * 3600)),
+    format: (v, axis) => (axis ? `${+v.toFixed(1)}h` : fmtDuration(v * 3600)),
     label: dayLabel,
   });
   timeBox.setAttribute("aria-label", "Tempo ligado por dia: " + s.daily.map((d) => `${dayLabel(d)} ${fmtDuration(d.seconds)}`).join(", "));
@@ -974,21 +808,13 @@ async function refreshStats() {
   );
   for (const n of names) {
     const tr = el("tr");
-    const caughtS = s.session.caught?.[n] || 0;
-    const caughtT = s.total.caught?.[n] || 0;
-    const ballsT = s.total.balls[n] || 0;
-    tr.append(
-      el("td", null, pretty(n)),
-      el("td", "num", `${s.session.balls[n] || 0} / ${caughtS}`),
-      el("td", "num", `${ballsT} / ${caughtT}`),
-      el("td", "num", ballsT && images.messages.success ? `${Math.round((caughtT / ballsT) * 100)}%` : "–"),
-    );
+    tr.append(el("td", null, pretty(n)), el("td", "num", s.session.balls[n] || 0), el("td", "num", s.total.balls[n] || 0));
     body.append(tr);
   }
   if (!names.length) {
     const tr = el("tr");
     const td = el("td", "empty", "Nenhuma pokébola jogada ainda.");
-    td.colSpan = 4;
+    td.colSpan = 3;
     tr.append(td);
     body.append(tr);
   }
@@ -1032,24 +858,6 @@ function wireUi() {
   }
 
   $$(".save").forEach((b) => b.addEventListener("click", () => save()));
-  $("#theme-select").addEventListener("change", (e) => {
-    applyTheme(e.target.value);
-    renderMascot();
-  });
-  $("#mascot-select").addEventListener("change", (e) => renderMascot(e.target.value));
-  $("#mascot-mode").addEventListener("change", () => renderMascot());
-  $("#mascot-opacity").addEventListener("input", () => renderMascot());
-  $("#mascot-add").addEventListener("click", async () => {
-    const added = await call("add_mascot_from_file");
-    if (!added) return;
-    images = await call("get_images");
-    buildMascotSelect();
-    $("#mascot-select").value = added;
-    renderMascot(added);
-    await save("Mascote adicionada");
-  });
-  $("#mascot-folder").addEventListener("click", () => call("open_mascot_folder"));
-  wireGroups();
   $("#stop-all").addEventListener("click", () => api.stop_all());
   $("#clear-logs").addEventListener("click", () => $("#log").replaceChildren());
   $("#open-logs").addEventListener("click", () => call("open_logs_folder"));
@@ -1077,15 +885,6 @@ function wireUi() {
   $("#pick-cancel").addEventListener("click", () => api.cancel_pick());
   $$("[data-swatch]").forEach((sw) => $(`[data-path="${sw.dataset.swatch}"]`).addEventListener("input", updateSwatches));
   $("#add-poke").addEventListener("click", openAddPokemon);
-  for (const box of $$("[data-msg]")) {
-    const kind = box.dataset.msg;
-    $("[data-msg-set]", box).addEventListener("click", () => startPick("region", `msg_${kind}`));
-    $("[data-msg-remove]", box).addEventListener("click", async () => {
-      if (!confirm("Remover esta mensagem do jogo?")) return;
-      await call("remove_message_image", kind);
-      await refreshImages();
-    });
-  }
   $("#add-waypoint").addEventListener("click", openAddWaypoint);
   $("#macro-select").addEventListener("change", () => {
     if ($("#macro-select").value) $("#macro-name").value = $("#macro-select").value;
@@ -1282,8 +1081,6 @@ async function init() {
   $$("[data-pickkey]").forEach((k) => (k.textContent = pickKey));
   buildModules(images.modules);
   buildCaptureGrid();
-  renderMessages();
-  buildMascotSelect();
   wireRouteDnD();
   await renderMacroList();
   applyConfig();

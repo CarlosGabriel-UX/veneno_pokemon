@@ -9,7 +9,7 @@ from pathlib import Path
 
 import webview
 
-from engine import MESSAGE_IMAGES, MODULES, PANEL_TITLE, PICK_HOTKEY, BotEngine
+from engine import MODULES, PANEL_TITLE, PICK_HOTKEY, BotEngine
 
 VERSION = "1.1.0"
 REPO = "Lis-Alon/Veneno_do_pokemon"
@@ -89,6 +89,8 @@ class API:
 
     def stop_all(self):
         self._engine.stop_all()
+        self._engine.stop_macro_recording()
+        self._engine.stop_macro_playback()
 
     # configurações e perfis
     def get_config(self):
@@ -123,25 +125,7 @@ class API:
             "pick_hotkey": PICK_HOTKEY,
             "capture": [encode("captura", n) for n in self._engine.capture_images()],
             "waypoints": [encode("map", n) for n in self._engine.map_waypoints()],
-            "mascots": [self._mascot(n) for n in self._engine.mascot_images()],
-            "messages": {kind: encode(*path.split("/"))["src"] if self._engine.has_message_image(kind) else None
-                         for kind, path in MESSAGE_IMAGES.items()},
         }
-
-    def _mascot(self, name):
-        path = self._engine.img / "mascotes" / name
-        mime = {".jpg": "jpeg", ".jpeg": "jpeg", ".gif": "gif", ".webp": "webp"}.get(path.suffix.lower(), "png")
-        return {"name": name, "src": f"data:image/{mime};base64," + base64.b64encode(path.read_bytes()).decode()}
-
-    def add_mascot_from_file(self):
-        kind = getattr(getattr(webview, "FileDialog", None), "OPEN", None) or webview.OPEN_DIALOG
-        files = self._window.create_file_dialog(kind, file_types=("Imagens (*.png;*.jpg;*.jpeg;*.gif;*.webp)",))
-        if not files:
-            return None
-        return self._engine.add_mascot(files[0] if isinstance(files, (list, tuple)) else files)
-
-    def open_mascot_folder(self):
-        self._engine.open_mascot_folder()
 
     def add_pokemon_from_file(self, name):
         kind = getattr(getattr(webview, "FileDialog", None), "OPEN", None) or webview.OPEN_DIALOG
@@ -162,12 +146,6 @@ class API:
 
     def remove_waypoint(self, name):
         self._engine.remove_waypoint(name)
-
-    def set_message_image(self, kind, region):
-        return self._engine.set_message_image(kind, region)
-
-    def remove_message_image(self, kind):
-        self._engine.remove_message_image(kind)
 
     # calibração e testes
     def start_pick(self, kind, target):
