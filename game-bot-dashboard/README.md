@@ -4,10 +4,10 @@ Janela para ligar e desligar o bot sem usar o terminal.
 
 ## O que tem
 
-**Módulos** (mesma lógica dos scripts da raiz)
-- **Batalha**: ataca (`e`, `q`) quando aparece inimigo (`battle.py`)
-- **Captura**: procura os pokémons marcados e joga a pokébola (`captura.py`)
-- **Cavebot**: segue a rota do minimapa, luta e captura (`cave bot.py`)
+**Módulos**
+- **Batalha**: ataca (`e`, `q`) quando aparece inimigo
+- **Captura**: procura os pokémons marcados e joga a pokébola; para quando as pokébolas acabam e conta as capturas confirmadas (com as mensagens do jogo recortadas)
+- **Cavebot**: segue a rota do minimapa, luta e captura
 - **Combate**: escolhe entre somente batalha, batalha com ciclo de troca ou apenas troca
 - **Troca**: ciclo independente entre os Pokémon na ordem configurada
 - **Cura**: aperta a tecla de cura quando um pixel da barra de vida do seu pokémon muda de cor
@@ -16,6 +16,9 @@ Janela para ligar e desligar o bot sem usar o terminal.
 **Segurança**
 - Os módulos **pausam sozinhos quando o jogo não está em primeiro plano** (não clicam em outras janelas)
 - Se a janela do jogo fechar, tudo para
+- Para tudo se o seu Pokémon desmaiar (com o pixel de desmaio marcado em **Ajustes > Cura**)
+- Não liga módulos que brigam pelo teclado ao mesmo tempo (ex.: Batalha com Combate ou Cavebot)
+- O `config.json` é salvo com segurança e tem cópia em `config.json.bak`; logs com mais de 30 dias são apagados
 - O cavebot desiste de uma luta que passar do **tempo máximo** e **para sozinho** se ficar várias voltas sem achar ponto no minimapa
 - **Alertas** com som e o painel piscando na barra de tarefas (erro, travamento, jogo fechado, timer, pokémon com 🔔)
 - Só abre **um painel por vez**

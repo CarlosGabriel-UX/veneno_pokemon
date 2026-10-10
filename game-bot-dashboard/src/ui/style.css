@@ -265,7 +265,7 @@ input[type=range] { width: 100%; margin-top: 12px; accent-color: var(--accent); 
   .loot-grid { grid-template-columns: repeat(3, 64px); grid-template-rows: repeat(3, 52px); }
 }
 
-.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 10px; margin-bottom: 20px; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px; margin-bottom: 20px; }
 .kpi { background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
 .kpi span { display: block; font-size: 11.5px; color: var(--muted); }
 .kpi b { font-size: 22px; font-variant-numeric: tabular-nums; }
@@ -409,3 +409,10 @@ body.compact .pick-banner { flex-wrap: wrap; padding: 8px 10px; gap: 8px; }
 .switch-point { flex: 1 1 120px; color: var(--muted); font-size: 12px; white-space: nowrap; }
 #macro-select { max-width: 220px; min-width: 150px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; }
 #macro-status { margin: 12px 0 18px; }
+
+/* mensagens do jogo (aba Captura) */
+.msg-list { display: grid; gap: 8px; margin-bottom: 16px; }
+.msg-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.msg-row > span { min-width: 150px; }
+.msg-state { font-weight: 500; font-size: 12px; color: var(--muted); margin-right: auto; }
+.msg-state.on { color: var(--on); }

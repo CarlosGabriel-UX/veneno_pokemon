@@ -16,7 +16,7 @@ REPO = "Lis-Alon/Veneno_do_pokemon"
 
 if getattr(sys, "frozen", False):
     # .exe gerado pelo PyInstaller: a pasta imags/ e o config.json ficam ao lado do .exe
-    ROOT = Path(sys.executable).parent1
+    ROOT = Path(sys.executable).parent
 else:
     # rodando do código-fonte: raiz do repositório (onde está a pasta imags/)
     ROOT = Path(__file__).resolve().parents[2]
@@ -128,7 +128,14 @@ class API:
             "capture": [encode("captura", n) for n in self._engine.capture_images()],
             "battle_targets": [encode("battle/pokemon_list", n) for n in self._engine.battle_target_images()],
             "waypoints": [encode("map", n) for n in self._engine.map_waypoints()],
+            "messages": self._engine.message_images(),
         }
+
+    def set_message_image(self, kind, region):
+        return self._engine.set_message_image(kind, region)
+
+    def remove_message_image(self, kind):
+        return self._engine.remove_message_image(kind)
 
     def add_battle_target_from_region(self, name, region):
         return self._engine.add_battle_target_image(name, region)

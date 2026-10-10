@@ -133,6 +133,16 @@
           <label>Tecla da pokébola <input data-path="capture.key" type="text" maxlength="3"></label>
           <label>Precisão (0–1) <input data-path="capture.confidence" type="number" step="0.05" min="0.3" max="1"></label>
           <label>Intervalo (s) <input data-path="capture.interval" type="number" step="0.1" min="0.1"></label>
+          <label>Espera para jogar de novo no mesmo Pokémon (s) <input data-path="capture.retry_delay" type="number" step="0.5" min="0" max="60"></label>
+          <label>Tempo para ver a mensagem de captura (s) <input data-path="capture.confirm_wait" type="number" step="0.5" min="1" max="30"></label>
+        </div>
+        <h3 class="sub-title">Mensagens do jogo</h3>
+        <p class="hint">Opcional. Recorte da tela a mensagem que o jogo mostra quando a captura dá certo e a que avisa que acabaram as pokébolas. Com elas, o bot conta as capturas confirmadas e desliga a captura quando as pokébolas acabam.</p>
+        <div class="msg-list">
+          <div class="msg-row" data-msg="success"><span>Captura confirmada</span><b class="msg-state"></b>
+            <button class="btn small" data-msg-pick="success">Recortar</button><button class="btn small ghost" data-msg-remove="success">Remover</button></div>
+          <div class="msg-row" data-msg="noball"><span>Sem pokébola</span><b class="msg-state"></b>
+            <button class="btn small" data-msg-pick="noball">Recortar</button><button class="btn small ghost" data-msg-remove="noball">Remover</button></div>
         </div>
         <button class="btn primary save">Salvar</button>
       </div>
@@ -167,7 +177,7 @@
         <div class="fields">
           <label>Teclas de ataque <small>separadas por vírgula</small> <input data-path="battle.attack_keys" data-type="list" type="text"></label>
           <label>Intervalo (s) <input data-path="battle.interval" type="number" step="0.1" min="0.1"></label>
-          <label>Precisão (0–1) <input data-path="battle.confidence" type="number" step="0.05" min="0.3" max="1"></label>
+          <label>Precisão <small>0,55–0,78</small> <input data-path="battle.confidence" type="number" step="0.01" min="0.55" max="0.78"></label>
           <label>Tempo preso em combate (s) <input data-path="battle.long_battle_after" type="number" step="1" min="1" max="3600"></label>
           <label>Tecla da ação extra <input data-path="battle.long_battle_key" type="text" maxlength="8"></label>
           <label>Repetições da tecla <input data-path="battle.long_battle_repeats" type="number" step="1" min="1" max="20"></label>
@@ -312,6 +322,7 @@
           <div class="kpi"><span>Tempo ligado (sessão)</span><b id="k-time">0min</b></div>
           <div class="kpi"><span>Batalhas (sessão)</span><b id="k-kills">0</b></div>
           <div class="kpi"><span>Pokébolas (sessão)</span><b id="k-balls">0</b></div>
+          <div class="kpi"><span>Capturas (sessão)</span><b id="k-caught">0</b></div>
           <div class="kpi"><span>Curas (sessão)</span><b id="k-heals">0</b></div>
           <div class="kpi"><span>Pokébolas no total</span><b id="k-total">0</b></div>
         </div>
@@ -331,14 +342,14 @@
             <div id="s-modules" class="bars"></div>
           </section>
           <section>
-            <h3 class="sub-title">Pokébolas por Pokémon</h3>
+            <h3 class="sub-title">Pokébolas e capturas por Pokémon</h3>
             <table class="table">
-              <thead><tr><th>Pokémon</th><th class="num">Sessão</th><th class="num">Total</th></tr></thead>
+              <thead><tr><th>Pokémon</th><th class="num">Bolas (sessão)</th><th class="num">Bolas (total)</th><th class="num">Capturas</th></tr></thead>
               <tbody id="s-pokes"></tbody>
             </table>
           </section>
         </div>
-        <p class="hint">O bot conta as pokébolas jogadas, mas não tem como saber se a captura deu certo. O histórico fica em <code>estatisticas.db</code>.</p>
+        <p class="hint">O bot conta as pokébolas jogadas. As capturas só são contadas se a mensagem de captura estiver recortada na aba Captura. O histórico fica em <code>estatisticas.db</code>.</p>
         <button id="reset-stats" class="btn ghost small">Zerar histórico</button>
       </div>
 
@@ -382,6 +393,12 @@
           <label>Cor com vida cheia <small>R, G, B</small>
             <span class="with-btn"><input data-path="heal.color" data-type="numlist" data-len="3" data-optional type="text"><span class="swatch" data-swatch="heal.color"></span></span>
           </label>
+          <label>Pixel de desmaio <small>começo da barra; vazio = não vigia</small>
+            <span class="with-btn"><input data-path="heal.faint_pixel" data-type="numlist" data-len="2" data-optional type="text" placeholder="não configurado"><button class="btn small" data-pick="point" data-target="heal.faint_pixel">Pegar</button></span>
+          </label>
+          <label>Cor do começo da barra <small>se sumir, o bot para tudo</small>
+            <span class="with-btn"><input data-path="heal.faint_color" data-type="numlist" data-len="3" data-optional type="text"><span class="swatch" data-swatch="heal.faint_color"></span></span>
+          </label>
           <label>Tecla de cura <small>ex.: f1, 2</small> <input data-path="heal.key" type="text" maxlength="4"></label>
           <label>Espera entre curas (s) <input data-path="heal.cooldown" type="number" step="0.5" min="0.5"></label>
           <label>Tecla de buff contínuo <small>vazio para desativar</small> <input data-path="heal.buff_key" type="text" maxlength="8" placeholder="ex.: f2"></label>
@@ -412,6 +429,7 @@
         <div class="fields">
           <label class="check wide"><input data-path="safety.pause_unfocused" type="checkbox"> Pausar quando o jogo não estiver em primeiro plano <small>evita clicar em outras janelas</small></label>
           <label>Tempo máximo de luta (s) <small>0 = sem limite</small> <input data-path="safety.fight_timeout" type="number" step="5" min="0"></label>
+          <label>Tolerância de cor <small>0–100; quanto cada canal pode variar</small> <input data-path="safety.color_tolerance" type="number" step="1" min="0" max="100"></label>
           <label>Voltas sem achar ponto até parar <small>0 = nunca parar</small> <input data-path="safety.max_misses" type="number" step="1" min="0"></label>
           <label class="check wide"><input data-path="alerts.sound" type="checkbox"> Tocar som e piscar o painel em alertas <small>erro, travamento, jogo fechado, timer ou Pokémon com 🔔</small></label>
         </div>
