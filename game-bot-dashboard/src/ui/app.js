@@ -1,16 +1,29 @@
 const DESCRIPTIONS = {
   battle: "Ataca quando aparece inimigo na batalha.",
-  capture: "Procura os pokémons marcados e joga a pokébola.",
+  capture: "Procura os Pokémon selecionados e lança a Pokébola.",
   cavebot: "Anda pela rota do minimapa, luta e captura.",
   heal: "Aperta a tecla de cura quando sua vida cai.",
-  switch: "Alterna entre os pokémon configurados no intervalo escolhido.",
+  switch: "Alterna continuamente entre as posições na ordem configurada.",
+  combat: "Executa o modo selecionado: batalha, batalha com troca, ou somente troca.",
+  macro: "Reproduz a rota gravada; pode repetir em ciclo e aguardar encontros prioritários.",
+  loot: "Verifica os tiles selecionados e coleta os itens dos Pokémon derrotados.",
 };
 const PICK_TARGETS = {
   "cavebot.map_region": "Área do minimapa",
   "capture.region": "Área de captura",
   "cavebot.hp_pixel": "Pixel da vida do inimigo",
   "heal.pixel": "Pixel da sua vida",
-  new_pokemon: "Recortar pokémon da tela",
+  "heal.order_point": "Ponto da Order",
+  "loot.center": "Centro do tile do personagem",
+  "loot.north": "Centro do tile vizinho ao norte",
+  "loot.east": "Centro do tile vizinho ao leste",
+  "loot.window_sample_region": "Janela de loot para calibração",
+  "loot.anchor_region": "Âncora dos controles direitos da janela de loot",
+  "loot.first_slot_offset": "Primeiro slot relativo à janela",
+  new_pokemon: "Recortar Pokémon da tela",
+  new_battle_target: "Recortar Pokémon da lista de combate",
+  "battle.pokemon_list_region": "Área da lista de combate",
+  new_battle_empty: "Definir a referência da lista de batalha vazia",
   new_waypoint: "Recortar ponto do minimapa",
   switch_slot: "Posição de troca",
 };
@@ -23,6 +36,7 @@ let lastSeq = 0;
 let pickKey = "F8";
 let pickHandled = null;
 let pendingPokemonName = "";
+let pendingBattleTargetName = "";
 let macroWasRecording = false;
 let timerEditing = false;
 const moduleEls = {};
@@ -89,19 +103,36 @@ function closeModal() {
 // ---------- módulos ----------
 function buildModules(modules) {
   const tpl = $("#module-tpl");
-  for (const [name, label] of Object.entries(modules)) {
+  const names = Object.keys(modules);
+  const savedOrder = Array.isArray(config.module_order) ? config.module_order : [];
+  const orderedNames = [...savedOrder.filter((name) => names.includes(name)), ...names.filter((name) => !savedOrder.includes(name))];
+  for (const name of orderedNames) {
+    const label = modules[name];
     const node = tpl.content.firstElementChild.cloneNode(true);
     $(".m-name", node).textContent = label;
     $(".m-desc", node).textContent = DESCRIPTIONS[name] || "";
     const input = $("input", node);
     input.setAttribute("aria-label", `Ligar ${label}`);
     input.addEventListener("change", async () => {
-      const ok = await call("toggle_module", name, input.checked).catch(() => false);
+      const args = name === "macro"
+        ? [name, input.checked, $("#macro-select").value, $("#macro-loop").checked]
+        : [name, input.checked];
+      const ok = await call("toggle_module", ...args).catch((error) => {
+        toast(error.message || "N\u00e3o foi poss\u00edvel alternar o m\u00f3dulo", true);
+        return false;
+      });
       if (input.checked && !ok) input.checked = false;
+    if (name === "macro" && ok) {
+      config.macro.name = $("#macro-select").value;
+      config.macro.loop = $("#macro-loop").checked;
+    }
     });
+    $(".m-order-up", node).addEventListener("click", () => moveModule(name, -1));
+    $(".m-order-down", node).addEventListener("click", () => moveModule(name, 1));
     $("#modules").append(node);
-    moduleEls[name] = { node, input, label, text: $(".m-text", node), key: $(".m-key", node) };
+    moduleEls[name] = { node, input, label, state: $(".m-state", node), text: $(".m-text", node), key: $(".m-key", node), up: $(".m-order-up", node), down: $(".m-order-down", node) };
   }
+  updateModuleOrderControls();
 
   // filtros do console e campos de atalho seguem a lista de módulos
   const chips = $("#log-filter");
@@ -121,6 +152,44 @@ function buildModules(modules) {
     const isStop = sel.dataset.path === "stop_hotkey";
     if (!isStop) sel.append(Object.assign(el("option", null, "Nenhum"), { value: "" }));
     for (const k of FKEYS) if (k !== pickKey) sel.append(Object.assign(el("option", null, k), { value: k }));
+  }
+}
+
+function updateModuleOrderControls() {
+  const nodes = $$("#modules .module");
+  nodes.forEach((node, index) => {
+    const name = Object.keys(moduleEls).find((key) => moduleEls[key].node === node);
+    if (!name) return;
+    moduleEls[name].up.disabled = index === 0;
+    moduleEls[name].down.disabled = index === nodes.length - 1;
+  });
+}
+
+async function moveModule(name, offset) {
+  const node = moduleEls[name]?.node;
+  if (!node) return;
+  const nodes = $$("#modules .module");
+  const index = nodes.indexOf(node);
+  const destination = index + offset;
+  if (destination < 0 || destination >= nodes.length) return;
+  const neighbor = nodes[destination];
+  if (offset < 0) neighbor.before(node);
+  else neighbor.after(node);
+  updateModuleOrderControls();
+  config.module_order = $$("#modules .module").map((item) =>
+    Object.keys(moduleEls).find((key) => moduleEls[key].node === item)
+  ).filter(Boolean);
+  try {
+    config = await call("save_config", config);
+    toast("Ordem dos módulos salva");
+  } catch (error) {
+    toast(error.message || "Não foi possível salvar a ordem", true);
+    config = await api.get_config();
+    const saved = Array.isArray(config.module_order) ? config.module_order : [];
+    const validNames = Object.keys(moduleEls);
+    const order = [...saved.filter((key) => validNames.includes(key)), ...validNames.filter((key) => !saved.includes(key))];
+    order.forEach((key) => $("#modules").append(moduleEls[key].node));
+    updateModuleOrderControls();
   }
 }
 
@@ -153,14 +222,34 @@ async function poll() {
     const s = await api.get_state(lastSeq);
     if (s.logs.length) lastSeq = s.logs[s.logs.length - 1].seq;
     appendLogs(s.logs);
+    $("#route-record").disabled = Boolean(s.route_recording);
+    $("#route-record-stop").disabled = !s.route_recording;
 
     let count = 0;
     for (const [name, m] of Object.entries(moduleEls)) {
       const running = s.running[name];
-      if (running) count++;
-      m.node.classList.toggle("running", running);
+      const macroActive = name === "macro" && (s.macro?.playing || s.macro?.recording);
+      const routeRecording = name === "cavebot" && s.route_recording;
+      const active = running || macroActive || routeRecording;
+      if (active) count++;
+      m.node.classList.toggle("running", active);
       if (document.activeElement !== m.input) m.input.checked = running;
-      m.text.textContent = running ? s.status[name] : "Parado";
+      if (name === "macro" && s.macro?.recording) {
+        m.state.textContent = "Gravando";
+        m.text.textContent = `${s.macro.name}: ${s.macro.actions} comandos`;
+      } else if (name === "macro" && s.macro?.playing) {
+        m.state.textContent = s.macro.paused ? "Pausado" : "Reproduzindo";
+        m.text.textContent = s.macro.paused
+          ? (s.macro.pause_reasons || []).join(", ") || `Retoma em ${Math.ceil(s.macro.resume_remaining || 0)} s`
+          : `${s.macro.loop ? "Em ciclo" : "Executando"}: ${s.macro.name || config.macro.name || "rota gravada"}`;
+      } else if (routeRecording) {
+        m.state.textContent = "Gravando";
+        m.text.textContent = "Registrando pontos do mapa";
+      } else {
+        m.state.textContent = running ? "Rodando" : "Parado";
+        m.text.textContent = s.status[name] || "Aguardando ativação";
+      }
+      m.text.title = m.text.textContent;
     }
     const pill = $("#status-pill");
     pill.classList.toggle("on", count > 0);
@@ -279,6 +368,39 @@ async function applyPick(target, result) {
     await afterPokemonAdded(added);
     return;
   }
+  if (target === "new_battle_target") {
+    await call("add_battle_target_from_region", pendingBattleTargetName, result.region);
+    config = await api.get_config();
+    await refreshImages();
+    toast(`Alvo "${pendingBattleTargetName}" adicionado`);
+    return;
+  }
+  if (target === "new_battle_empty") {
+    await call("set_battle_empty_from_region", result.region);
+    config = await api.get_config();
+    applyConfig();
+    toast("Referência da batalha vazia definida");
+    return;
+  }
+  if (target === "loot.anchor_region") {
+    await call("capture_loot_anchor", result.region);
+    config = await api.get_config();
+    applyConfig();
+    toast("Âncora visual do Loot salva");
+    return;
+  }
+  if (target === "loot.first_slot_offset") {
+    const windowRegion = config.loot?.window_sample_region || [];
+    if (windowRegion.length !== 4) {
+      toast("Marque primeiro a janela inteira de loot", true);
+      return;
+    }
+    const input = $(`[data-path="${target}"]`);
+    const point = [result.region[0] - windowRegion[0], result.region[1] - windowRegion[1], result.region[2], result.region[3]];
+    input.value = point.join(", ");
+    await save("Calibração relativa da janela salva");
+    return;
+  }
   if (target === "new_waypoint") {
     const added = await call("add_waypoint_from_region", result.region);
     config = await api.get_config();
@@ -335,6 +457,15 @@ function fillForm() {
   }
   updateSwatches();
   renderWindowRef();
+  renderLootGrid();
+}
+
+function renderLootGrid() {
+  const selected = new Set(config?.loot?.targets || []);
+  $$("[data-loot-cell]").forEach((cell) => {
+    cell.classList.toggle("selected", selected.has(cell.dataset.lootCell));
+    cell.setAttribute("aria-pressed", selected.has(cell.dataset.lootCell) ? "true" : "false");
+  });
 }
 
 function applyConfig() {
@@ -342,6 +473,11 @@ function applyConfig() {
   for (const t of $$("#capture-grid .thumb")) {
     t.classList.toggle("on", config.capture.targets.includes(t.dataset.name));
     $(".bell", t).classList.toggle("on", config.capture.alert_on.includes(t.dataset.name));
+    const keyInput = $(".poke-key", t);
+    if (keyInput) keyInput.value = config.capture.keys?.[t.dataset.name] || "";
+  }
+  for (const target of $$("#battle-target-grid .thumb")) {
+    target.classList.toggle("on", (config.battle.pause_targets || []).includes(target.dataset.name));
   }
   buildRoute();
   renderSwitchSlots();
@@ -361,11 +497,62 @@ function readForm() {
   }
   next.capture.targets = $$("#capture-grid .thumb.on").map((t) => t.dataset.name);
   next.capture.alert_on = $$("#capture-grid .bell.on").map((b) => b.closest(".thumb").dataset.name);
+  next.capture.keys = Object.fromEntries($$("#capture-grid .poke-key").map((input) => [input.dataset.pokemon, input.value.trim()]).filter(([, key]) => key));
+  next.battle.pause_targets = $$("#battle-target-grid .thumb.on").map((target) => target.dataset.name);
   next.cavebot.route = readRoute();
+  next.loot.targets = $$("[data-loot-cell].selected").map((cell) => cell.dataset.lootCell);
   return next;
 }
 
 function validate() {
+  const engageDelay = Number($('[data-path="cavebot.engage_delay"]').value);
+  if (!Number.isFinite(engageDelay) || engageDelay < 0 || engageDelay > 3600) {
+    toast("O atraso após clicar no mapa deve ficar entre 0 e 3600 segundos", true);
+    $('[data-path="cavebot.engage_delay"]').focus();
+    return false;
+  }
+  const cavebotBattleSkipAfter = Number($('[data-path="cavebot.battle_skip_after"]').value);
+  if (!Number.isFinite(cavebotBattleSkipAfter) || cavebotBattleSkipAfter < 0 || cavebotBattleSkipAfter > 3600) {
+    toast("O limite para ignorar a batalha no Cavebot deve ficar entre 0 e 3600 segundos", true);
+    $('[data-path="cavebot.battle_skip_after"]').focus();
+    return false;
+  }
+  const longBattleAfter = Number($('[data-path="battle.long_battle_after"]').value);
+  const longBattleEnabled = $('[data-path="battle.long_battle_enabled"]').checked;
+  if (longBattleEnabled && (!Number.isFinite(longBattleAfter) || longBattleAfter < 1 || longBattleAfter > 3600)) {
+    toast("O tempo preso em combate deve ficar entre 1 e 3600 segundos", true);
+    $('[data-path="battle.long_battle_after"]').focus();
+    return false;
+  }
+  const autoTargetEnabled = $('[data-path="battle.auto_target_enabled"]').checked;
+  const autoTargetKey = $('[data-path="battle.auto_target_key"]').value.trim().toLowerCase();
+  const validActionKeys = new Set([
+    ..."abcdefghijklmnopqrstuvwxyz0123456789",
+    ...FKEYS.filter((key) => key !== "F8").map((key) => key.toLowerCase()),
+    "backspace", "tab", "enter", "esc", "space", "left", "up", "right", "down",
+  ]);
+  if (autoTargetEnabled && !validActionKeys.has(autoTargetKey)) {
+    toast("Configure uma tecla válida para o auto target", true);
+    $('[data-path="battle.auto_target_key"]').focus();
+    return false;
+  }
+  const followEnabled = $('[data-path="heal.follow_enabled"]').checked;
+  const followKey = $('[data-path="heal.follow_key"]').value.trim().toLowerCase();
+  const followInterval = Number($('[data-path="heal.follow_interval"]').value);
+  if (followEnabled && (!validActionKeys.has(followKey) || !Number.isFinite(followInterval) || followInterval < 0.1 || followInterval > 3600)) {
+    toast("Configure uma tecla válida e um intervalo entre 0,1 e 3600 segundos para o acompanhamento", true);
+    $('[data-path="heal.follow_key"]').focus();
+    return false;
+  }
+  const orderEnabled = $('[data-path="heal.order_enabled"]').checked;
+  const orderKey = $('[data-path="heal.order_key"]').value.trim().toLowerCase();
+  const orderInterval = Number($('[data-path="heal.order_interval"]').value);
+  const orderPoint = $('[data-path="heal.order_point"]').value.split(/[,\s]+/).filter(Boolean).map(Number);
+  if (orderEnabled && (!validActionKeys.has(orderKey) || orderPoint.length !== 2 || orderPoint.some((value) => !Number.isFinite(value)) || !Number.isFinite(orderInterval) || orderInterval < 0.1 || orderInterval > 3600)) {
+    toast("Configure tecla, ponto e intervalo entre 0,1 e 3600 segundos para a Order", true);
+    $('[data-path="heal.order_key"]').focus();
+    return false;
+  }
   for (const input of $$("[data-type=numlist]")) {
     const nums = input.value.split(/[,\s]+/).filter(Boolean).map(Number);
     const want = Number(input.dataset.len);
@@ -431,7 +618,20 @@ function buildCaptureGrid() {
       bell.classList.toggle("on");
     });
 
-    t.append(rm, pic, el("span", "n", name), bell);
+    const keyLabel = el("label", "thumb-key-label", "Tecla de captura");
+    const keyInput = el("input", "thumb-key poke-key");
+    keyInput.type = "text";
+    keyInput.maxLength = 3;
+    keyInput.placeholder = config.capture.key || "1";
+    keyInput.value = config.capture.keys?.[img.name] || "";
+    keyInput.dataset.pokemon = img.name;
+    keyInput.title = `Tecla para capturar ${name}; vazio usa ${config.capture.key || "1"}`;
+    keyInput.addEventListener("click", (ev) => ev.stopPropagation());
+    keyInput.addEventListener("keydown", (ev) => ev.stopPropagation());
+    keyLabel.addEventListener("click", (ev) => ev.stopPropagation());
+    keyLabel.append(keyInput);
+
+    t.append(rm, pic, el("span", "n", name), bell, keyLabel);
     const toggle = () => t.classList.toggle("on");
     t.addEventListener("click", toggle);
     t.addEventListener("keydown", (ev) => (ev.key === "Enter" || ev.key === " ") && ev.target === t && (ev.preventDefault(), toggle()));
@@ -440,9 +640,74 @@ function buildCaptureGrid() {
   if (!images.capture.length) grid.append(el("p", "hint", "Nenhuma imagem em imags/captura."));
 }
 
+function buildBattleTargetGrid() {
+  const grid = $("#battle-target-grid");
+  grid.replaceChildren();
+  const selected = new Set(config.battle.pause_targets || []);
+  for (const target of images.battle_targets || []) {
+    const card = el("div", "thumb");
+    card.tabIndex = 0;
+    card.setAttribute("role", "button");
+    card.setAttribute("aria-label", `Usar ${pretty(target.name)} como alvo de pausa`);
+    card.dataset.name = target.name;
+    card.classList.toggle("on", selected.has(target.name));
+    const image = el("img");
+    image.src = target.src;
+    image.alt = "";
+    const remove = el("button", "rm", "×");
+    remove.type = "button";
+    remove.title = `Remover ${pretty(target.name)}`;
+    remove.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      if (!confirm(`Remover o alvo "${pretty(target.name)}"?`)) return;
+      await call("remove_battle_target", target.name);
+      config = await api.get_config();
+      await refreshImages();
+    });
+    card.append(remove, image, el("span", "n", pretty(target.name)));
+    card.addEventListener("click", () => card.classList.toggle("on"));
+    card.addEventListener("keydown", (event) => {
+      if ((event.key === "Enter" || event.key === " ") && event.target === card) {
+        event.preventDefault();
+        card.classList.toggle("on");
+      }
+    });
+    grid.append(card);
+  }
+  if (!images.battle_targets?.length) grid.append(el("p", "hint", "Nenhum Pokémon cadastrado para a lista de combate."));
+}
+
+function openAddBattleTarget() {
+  const form = el("div", "add-form");
+  const fields = el("div", "fields");
+  const label = el("label", null, "Nome do Pokémon");
+  const name = el("input");
+  name.type = "text";
+  name.maxLength = 40;
+  name.placeholder = "ex.: pikachu";
+  label.append(name);
+  fields.append(label);
+  const help = el("p", "hint", `Deixe o Pokémon visível na lista de combate, clique em recortar e marque somente o ícone ou nome com ${pickKey}.`);
+  const start = el("button", "btn primary", "Recortar da lista");
+  start.addEventListener("click", async () => {
+    if (!name.value.trim()) {
+      toast("Digite um nome para o Pokémon", true);
+      name.focus();
+      return;
+    }
+    pendingBattleTargetName = name.value.trim();
+    closeModal();
+    await startPick("region", "new_battle_target");
+  });
+  form.append(fields, help, start);
+  openModal("Adicionar Pokémon da lista de combate", form);
+  setTimeout(() => name.focus(), 50);
+}
+
 async function refreshImages() {
   images = await call("get_images");
   buildCaptureGrid();
+  buildBattleTargetGrid();
   buildRoute();
 }
 
@@ -450,7 +715,7 @@ function openAddPokemon() {
   const form = el("div", "add-form");
   const wrap = el("div", "fields");
   wrap.style.marginBottom = "0";
-  const lab = el("label", null, "Nome do pokémon");
+  const lab = el("label", null, "Nome do Pokémon");
   const name = el("input");
   name.type = "text";
   name.placeholder = "ex.: croa";
@@ -463,7 +728,7 @@ function openAddPokemon() {
   row.append(fromScreen, fromFile);
 
   const help = el("p", "hint");
-  help.innerHTML = `<b>Recortar da tela</b>: deixe o pokémon visível no jogo, clique no botão e marque o canto de cima à esquerda e o de baixo à direita dele com <kbd class="k">${pickKey}</kbd>. Recorte bem justo, só o pokémon.`;
+  help.innerHTML = `<b>Recortar da tela</b>: deixe o Pokémon visível no jogo, clique no botão e marque o canto superior esquerdo e depois o canto inferior direito com <kbd class="k">${pickKey}</kbd>. Faça um recorte justo, contendo apenas o Pokémon.`;
 
   fromFile.addEventListener("click", async () => {
     const added = await call("add_pokemon_from_file", name.value.trim());
@@ -484,7 +749,7 @@ function openAddPokemon() {
   });
 
   form.append(wrap, row, help);
-  openModal("Adicionar pokémon", form);
+  openModal("Adicionar Pokémon", form);
   setTimeout(() => name.focus(), 50);
 }
 
@@ -657,6 +922,13 @@ async function runTest(kind) {
           : "Não achei a batalha vazia, então o bot acha que tem inimigo. Se não tiver, abaixe a precisão ou atualize imags/battle/batalha_vazia.png.",
       ),
     );
+    body.append(el(
+      "div",
+      "callout",
+      r.target_detected
+        ? "Alvo cadastrado encontrado na lista. Essa detecção é independente do estado de lista vazia."
+        : "Nenhum alvo cadastrado foi encontrado na região da lista de combate.",
+    ));
     if (r.extra) {
       const hp = el("div", "callout");
       const sw = el("span", "swatch");
@@ -859,6 +1131,40 @@ function wireUi() {
 
   $$(".save").forEach((b) => b.addEventListener("click", () => save()));
   $("#stop-all").addEventListener("click", () => api.stop_all());
+  $("#loot-window-test").addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const found = await call("locate_loot_window");
+      if (!found) toast("Janela de loot não encontrada na tela", true);
+      else {
+        const first = found.first_slot_region
+          ? ` | 1o slot: ${found.first_slot_region[0]}, ${found.first_slot_region[1]}`
+          : " | configure o primeiro slot";
+        toast(`Janela encontrada em ${found.region[0]}, ${found.region[1]}${first} (confiança ${found.anchor_score.toFixed(2)})`);
+      }
+    } catch (error) {
+      toast(error.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  });
+  $("#loot-empty-slot-capture").addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      await call("capture_loot_empty_slot");
+      toast("Referencia do slot vazio capturada");
+    } catch (error) {
+      toast(error.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  });
+  $$('[data-loot-cell]').forEach((cell) => cell.addEventListener("click", async () => {
+    cell.classList.toggle("selected");
+    if (!await save("Tiles de loot salvos")) renderLootGrid();
+  }));
   $("#clear-logs").addEventListener("click", () => $("#log").replaceChildren());
   $("#open-logs").addEventListener("click", () => call("open_logs_folder"));
 
@@ -885,10 +1191,75 @@ function wireUi() {
   $("#pick-cancel").addEventListener("click", () => api.cancel_pick());
   $$("[data-swatch]").forEach((sw) => $(`[data-path="${sw.dataset.swatch}"]`).addEventListener("input", updateSwatches));
   $("#add-poke").addEventListener("click", openAddPokemon);
+  $("#battle-target-add").addEventListener("click", openAddBattleTarget);
+  $("#battle-empty-pick").addEventListener("click", () => startPick("region", "new_battle_empty"));
   $("#add-waypoint").addEventListener("click", openAddWaypoint);
-  $("#macro-select").addEventListener("change", () => {
-    if ($("#macro-select").value) $("#macro-name").value = $("#macro-select").value;
+  $('[data-path="battle.long_battle_enabled"]').addEventListener("change", async (event) => {
+    if (event.currentTarget.checked && Number($('[data-path="battle.long_battle_after"]').value) < 1) {
+      $('[data-path="battle.long_battle_after"]').value = "30";
+    }
+    if (!await save("Ação extra atualizada")) {
+      event.currentTarget.checked = Boolean(config.battle.long_battle_enabled);
+    }
   });
+  $('[data-path="battle.auto_target_enabled"]').addEventListener("change", async (event) => {
+    if (!await save("Auto target atualizado")) {
+      event.currentTarget.checked = Boolean(config.battle.auto_target_enabled);
+    }
+  });
+  $('[data-path="heal.order_enabled"]').addEventListener("change", async (event) => {
+    if (!await save("Ordem de pesca atualizada")) event.currentTarget.checked = Boolean(config.heal.order_enabled);
+  });
+  $('[data-path="heal.follow_enabled"]').addEventListener("change", async (event) => {
+    if (!await save("Acompanhamento atualizado")) {
+      event.currentTarget.checked = Boolean(config.heal.follow_enabled);
+    }
+  });
+  $$('[data-path="battle.long_battle_after"], [data-path="battle.long_battle_key"], [data-path="battle.long_battle_repeats"], [data-path="battle.auto_target_key"]').forEach((input) => {
+    input.addEventListener("change", () => save("Configuração de batalha salva"));
+  });
+  $$('[data-path="heal.follow_key"], [data-path="heal.follow_interval"]').forEach((input) => {
+    input.addEventListener("change", () => save("Configuração de acompanhamento salva"));
+  });
+  $$('[data-path="heal.order_key"], [data-path="heal.order_interval"], [data-path="heal.order_point"]').forEach((input) => {
+    input.addEventListener("change", () => save("Configura??o da Order salva"));
+  });
+  $("#route-record").addEventListener("click", async () => {
+    if (!confirm("A gravação substituirá a sequência atual da rota. Clique nos marcadores do minimapa em ordem; depois pressione Parar gravação.")) return;
+    try {
+      await call("start_route_recording");
+      toast("Gravação de rota iniciada. Clique nos pontos do minimapa.");
+    } catch (error) {
+      toast(error.message, true);
+    }
+  });
+  $("#route-record-stop").addEventListener("click", async () => {
+    await call("stop_route_recording");
+    config = await api.get_config();
+    await refreshImages();
+    applyConfig();
+    toast("Gravação de rota encerrada.");
+  });
+  $("#macro-select").addEventListener("change", async () => {
+    if ($("#macro-select").value) $("#macro-name").value = $("#macro-select").value;
+    await call("configure_macro_module", $("#macro-select").value, $("#macro-loop").checked).catch((error) => toast(error.message, true));
+    config.macro.name = $("#macro-select").value;
+    await loadMacroOptions();
+  });
+  $("#macro-loop").addEventListener("change", async () => {
+    await call("configure_macro_module", $("#macro-select").value, $("#macro-loop").checked).catch((error) => toast(error.message, true));
+    config.macro.loop = $("#macro-loop").checked;
+  });
+  $$('[data-macro-pause]').forEach((button) => button.addEventListener("click", async () => {
+    button.dataset.enabled = button.dataset.enabled !== "true" ? "true" : "false";
+    updateMacroPauseButtons();
+    await saveMacroOptions();
+  }));
+  $$('[data-macro-delay]').forEach((input) => input.addEventListener("change", saveMacroOptions));
+  $('[data-macro-command-interval]').addEventListener("change", saveMacroOptions);
+  $('[data-macro-skip-battle-after]').addEventListener("change", saveMacroOptions);
+  $('[data-path="cavebot.battle_skip_after"]').addEventListener("change", () => save("Tempo limite do Cavebot salvo"));
+  $("#macro-options-save").addEventListener("click", () => saveMacroOptions());
   $("#macro-record").addEventListener("click", async () => {
     const name = $("#macro-name").value.trim();
     const duration = Number($("#macro-duration").value);
@@ -896,7 +1267,7 @@ function wireUi() {
     const normalized = name.toLowerCase().replace(/[^\p{L}\p{N}_ -]/gu, "").trim().replace(/\s+/g, "_") || "pokemon";
     const existing = await call("list_macros").catch(() => []);
     if (existing.includes(normalized) && !confirm(`A macro "${normalized}" já existe. Substituir?`)) return;
-    await call("start_macro_recording", name, duration);
+    await call("start_macro_recording", name, duration, true, 0, collectMacroOptions(), $("#macro-arrows-only").checked);
     toast("Gravação iniciada; execute as ações no jogo");
   });
   $("#macro-stop-record").addEventListener("click", async () => {
@@ -906,7 +1277,8 @@ function wireUi() {
   $("#macro-play").addEventListener("click", async () => {
     const name = $("#macro-select").value;
     if (!name) return toast("Selecione uma macro", true);
-    await call("play_macro", name);
+    if (!await saveMacroOptions(false)) return;
+    await call("play_macro", name, $("#macro-loop").checked);
     toast(`Reproduzindo ${name}`);
   });
   $("#macro-stop-play").addEventListener("click", () => call("stop_macro_playback"));
@@ -1017,20 +1389,102 @@ async function renderMacroList(selected) {
   select.disabled = !names.length;
   $("#macro-play").disabled = !select.value;
   $("#macro-delete").disabled = !select.value;
+  await loadMacroOptions();
 }
+
+async function loadMacroOptions() {
+  const select = $("#macro-select");
+  const buttons = $$('[data-macro-pause]');
+  const delays = $$('[data-macro-delay]');
+  const commandInterval = $('[data-macro-command-interval]');
+  const skipBattleAfter = $('[data-macro-skip-battle-after]');
+  if (!select.value) {
+    buttons.forEach((button) => { button.dataset.enabled = "true"; });
+    delays.forEach((input) => { input.value = "0"; });
+    commandInterval.value = "0";
+    skipBattleAfter.value = "0";
+    updateMacroPauseButtons();
+    buttons.concat(delays, [commandInterval, skipBattleAfter]).forEach((control) => { control.disabled = Boolean(macroCurrentState?.recording || macroCurrentState?.playing); });
+    return;
+  }
+  const options = await call("get_macro_options", select.value).catch(() => ({}));
+  commandInterval.value = String(options.command_interval ?? 0);
+  skipBattleAfter.value = String(options.skip_battle_after ?? 0);
+  for (const category of ["battle", "capture", "target"]) {
+    const button = $(`[data-macro-pause="${category}"]`);
+    const delay = $(`[data-macro-delay="${category}"]`);
+    button.dataset.enabled = options[`pause_${category}`] !== false ? "true" : "false";
+    delay.value = String(options[`delay_${category}`] ?? 0);
+  }
+  updateMacroPauseButtons();
+  buttons.concat(delays, [commandInterval, skipBattleAfter]).forEach((control) => { control.disabled = Boolean(macroCurrentState?.recording || macroCurrentState?.playing); });
+}
+
+function updateMacroPauseButtons() {
+  const labels = { battle: "batalha", capture: "captura", target: "Pok\u00e9mon-alvo" };
+  $$('[data-macro-pause]').forEach((button) => {
+    const enabled = button.dataset.enabled === "true";
+    button.textContent = `Pausa em ${labels[button.dataset.macroPause]}: ${enabled ? "ativada" : "desativada"}`;
+    button.setAttribute("aria-pressed", String(enabled));
+    button.classList.toggle("primary", enabled);
+  });
+}
+
+function collectMacroOptions() {
+  const options = {};
+  for (const category of ["battle", "capture", "target"]) {
+    options[`pause_${category}`] = $(`[data-macro-pause="${category}"]`).dataset.enabled === "true";
+    options[`delay_${category}`] = Number($(`[data-macro-delay="${category}"]`).value);
+  }
+  options.command_interval = Number($('[data-macro-command-interval]').value);
+  options.skip_battle_after = Number($('[data-macro-skip-battle-after]').value);
+  return options;
+}
+
+async function saveMacroOptions(showToast = true) {
+  const options = collectMacroOptions();
+  if (Object.values(options).some((value) => typeof value === "number" && (!Number.isFinite(value) || value < 0 || value > 3600))) {
+    toast("Defina cada tempo entre 0 e 3600 segundos", true);
+    await loadMacroOptions();
+    return false;
+  }
+  const name = $("#macro-select").value;
+  if (!name) return true;
+  try {
+    await call("set_macro_options", name, options);
+    if (showToast) toast("Opções da macro salvas");
+    return true;
+  } catch (error) {
+    toast(error.message || "Não foi possível salvar as opções", true);
+    await loadMacroOptions();
+    return false;
+  }
+}
+
+let macroCurrentState = null;
 
 function renderMacroState(state) {
   if (!state) return;
+  macroCurrentState = state;
   $("#macro-record").disabled = state.recording || state.playing;
+  $("#macro-arrows-only").disabled = state.recording || state.playing;
   $("#macro-stop-record").disabled = !state.recording;
   $("#macro-play").disabled = state.recording || state.playing || !$("#macro-select").value;
+  $("#macro-loop").disabled = state.recording || state.playing || !$("#macro-select").value;
   $("#macro-stop-play").disabled = !state.playing;
   $("#macro-delete").disabled = state.recording || state.playing || !$("#macro-select").value;
+  $("#macro-select").disabled = state.recording || state.playing || !$("#macro-select").options.length;
+  $$('[data-macro-pause], [data-macro-delay], [data-macro-command-interval], [data-macro-skip-battle-after]').forEach((control) => { control.disabled = state.recording || state.playing; });
+  $("#macro-options-save").disabled = state.recording || state.playing || !$("#macro-select").value;
   const status = $("#macro-status");
   if (state.recording) {
     status.textContent = `Gravando ${state.name}: ${Math.ceil(state.duration - state.elapsed)} s restantes.`;
   } else if (state.playing) {
-    status.textContent = `Reproduzindo ${$("#macro-select").value || "macro"} no jogo.`;
+    status.textContent = state.paused
+      ? state.pause_reasons.length
+        ? `Rota gravada pausada durante ${state.pause_reasons.join(", ")}; retoma automaticamente.`
+        : `Aguardando ${Math.ceil(state.resume_remaining)} s para retomar a rota gravada.`
+      : `Reproduzindo ${$("#macro-select").value || "rota gravada"}${state.loop ? " em ciclo" : ""} no jogo.`;
   } else {
     status.textContent = "Nenhuma gravação ou reprodução em andamento.";
   }
@@ -1046,7 +1500,7 @@ function renderSwitchSlots() {
     list.append(el("p", "hint", "Nenhuma posição configurada."));
     return;
   }
-  for (const slot of slots) {
+  slots.forEach((slot, index) => {
     const row = el("div", "switch-row");
     const name = el("strong", "switch-name", slot.name);
     const point = el("span", "switch-point mono", slot.point ? slot.point.join(", ") : "posição não marcada");
@@ -1068,9 +1522,27 @@ function renderSwitchSlots() {
       config = await api.get_config();
       renderSwitchSlots();
     });
-    row.append(name, point, mark, click, remove);
+    const order = el("div", "slot-order");
+    const up = el("button", "btn ghost small", "↑");
+    up.type = "button";
+    up.title = "Mover para cima na ordem do ciclo";
+    up.disabled = index === 0;
+    up.addEventListener("click", async () => {
+      config.switch.slots = await call("move_switch_slot", slot.id, -1);
+      renderSwitchSlots();
+    });
+    const down = el("button", "btn ghost small", "↓");
+    down.type = "button";
+    down.title = "Mover para baixo na ordem do ciclo";
+    down.disabled = index === slots.length - 1;
+    down.addEventListener("click", async () => {
+      config.switch.slots = await call("move_switch_slot", slot.id, 1);
+      renderSwitchSlots();
+    });
+    order.append(up, down);
+    row.append(name, point, mark, click, remove, order);
     list.append(row);
-  }
+  });
 }
 
 async function init() {
@@ -1081,8 +1553,9 @@ async function init() {
   $$("[data-pickkey]").forEach((k) => (k.textContent = pickKey));
   buildModules(images.modules);
   buildCaptureGrid();
+  buildBattleTargetGrid();
   wireRouteDnD();
-  await renderMacroList();
+  await renderMacroList(config.macro?.name);
   applyConfig();
   wireUi();
   poll();
