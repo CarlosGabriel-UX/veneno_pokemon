@@ -24,7 +24,7 @@ else:
 # Caminho relativo: o pywebview resolve a partir da pasta do main.py (ou de dentro do .exe)
 UI_URL = "ui/index.html"
 
-FULL_SIZE = (1100, 760)
+FULL_SIZE = (1260, 780)
 COMPACT_SIZE = (330, 540)
 
 

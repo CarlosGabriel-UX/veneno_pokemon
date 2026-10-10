@@ -208,10 +208,19 @@ function appendLogs(logs) {
     if (l.module) row.append(el("span", "tag", `[${moduleEls[l.module]?.label || l.module}]`));
     row.append(l.msg);
     box.append(row);
+    if (l.level === "error" && !$("#tab-console").classList.contains("active")) unseenErrors++;
   }
+  renderLogBadge();
   while (box.childElementCount > 800) box.firstElementChild.remove();
   applyLogFilter();
   if (stick) box.scrollTop = box.scrollHeight;
+}
+
+let unseenErrors = 0;
+function renderLogBadge() {
+  const badge = $("#log-badge");
+  badge.hidden = !unseenErrors;
+  badge.textContent = unseenErrors > 99 ? "99+" : unseenErrors;
 }
 
 function applyLogFilter() {
@@ -1148,6 +1157,11 @@ function wireUi() {
     tab.addEventListener("click", () => {
       $$(".tab").forEach((t) => t.classList.toggle("active", t === tab));
       $$(".tab-body").forEach((b) => b.classList.toggle("active", b.id === `tab-${tab.dataset.tab}`));
+      $("#panel-title").textContent = tab.title;
+      if (tab.dataset.tab === "console") {
+        unseenErrors = 0;
+        renderLogBadge();
+      }
       clearInterval(statsTimer);
       if (tab.dataset.tab === "stats") {
         refreshStats();

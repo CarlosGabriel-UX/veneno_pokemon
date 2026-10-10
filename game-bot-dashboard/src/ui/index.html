@@ -57,6 +57,30 @@
   </div>
 
   <main class="layout">
+    <nav class="nav full-only" role="tablist" aria-label="Menu">
+      <div class="nav-head">
+        <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
+          <path d="M16 3c4 6 9 10.5 9 16a9 9 0 0 1-18 0c0-5.5 5-10 9-16z" fill="var(--accent)"/>
+          <circle cx="13" cy="19" r="2.3" fill="var(--bg)"/><circle cx="19.5" cy="15.5" r="1.5" fill="var(--bg)"/>
+        </svg>
+        <span class="nav-label">Veneno</span>
+      </div>
+      <div class="nav-group">
+        <button class="tab active" data-tab="console" title="Console"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="5"/><path d="M7.5 10l2.5 2-2.5 2M12.5 14.5h4"/></svg><span class="nav-label">Console</span><span id="log-badge" class="nav-badge" hidden>0</span></button>
+        <button class="tab" data-tab="stats" title="Estatísticas"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 15.5v-3M12 15.5v-7M15.5 15.5v-5"/></svg><span class="nav-label">Estatísticas</span></button>
+      </div>
+      <div class="nav-group">
+        <button class="tab" data-tab="capture" title="Captura"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h6M15 12h6"/><circle cx="12" cy="12" r="3"/></svg><span class="nav-label">Captura</span></button>
+        <button class="tab" data-tab="battle" title="Batalha"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 3L5 13.5h6L10 21l8-10.5h-6L13 3z"/></svg><span class="nav-label">Batalha</span></button>
+        <button class="tab" data-tab="cavebot" title="Rota"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4L3.5 6.5v13L9 17l6 3 5.5-2.5v-13L15 7 9 4zM9 4v13M15 7v13"/></svg><span class="nav-label">Rota</span></button>
+        <button class="tab" data-tab="loot" title="Loot"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="7" width="17" height="13" rx="4"/><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7M3.5 12.5h17M12 11.5v2.5"/></svg><span class="nav-label">Loot</span></button>
+      </div>
+      <div class="nav-group">
+        <button class="tab" data-tab="actions" title="Ações"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="4"/><path d="M6.5 10h.01M10 10h.01M14 10h.01M17.5 10h.01M8 14h8"/></svg><span class="nav-label">Ações</span></button>
+        <button class="tab" data-tab="settings" title="Ajustes"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><g transform="translate(2.2 2.2) scale(.82)"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></g></svg><span class="nav-label">Ajustes</span></button>
+      </div>
+    </nav>
+
     <aside class="side">
       <h2 class="section-title">Módulos</h2>
       <p class="desc module-order-hint">Use as setas para mudar a ordem de exibição.</p>
@@ -96,16 +120,7 @@
     </aside>
 
     <section class="panel full-only">
-      <nav class="tabs" role="tablist">
-        <button class="tab active" data-tab="console">Console</button>
-        <button class="tab" data-tab="capture">Captura</button>
-        <button class="tab" data-tab="battle">Batalha</button>
-        <button class="tab" data-tab="cavebot">Rota</button>
-        <button class="tab" data-tab="stats">Estatísticas</button>
-        <button class="tab" data-tab="settings">Ajustes</button>
-        <button class="tab" data-tab="actions">Ações</button>
-        <button class="tab" data-tab="loot">Loot</button>
-      </nav>
+      <div class="panel-head"><h2 id="panel-title">Console</h2></div>
 
       <!-- Console -->
       <div class="tab-body active" id="tab-console">
