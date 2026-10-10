@@ -62,6 +62,20 @@ def already_running():
     return True
 
 
+def hide_console():
+    """Esconde a janela preta do terminal quando ela foi aberta só para o painel
+    (dois cliques no main.py). Se o painel foi aberto de um terminal que já estava aberto, deixa como está."""
+    if sys.platform != "win32":
+        return
+    kernel32 = ctypes.windll.kernel32
+    hwnd = kernel32.GetConsoleWindow()
+    if not hwnd:
+        return  # pythonw ou .exe: não tem terminal
+    procs = (ctypes.c_uint * 4)()
+    if kernel32.GetConsoleProcessList(procs, 4) <= 1:  # o terminal é só deste processo
+        ctypes.windll.user32.ShowWindow(hwnd, 0)  # SW_HIDE
+
+
 class API:
     def __init__(self, engine: BotEngine):
         self._engine = engine
@@ -283,6 +297,7 @@ class API:
 if __name__ == "__main__":
     if already_running():
         sys.exit(0)
+    hide_console()
     engine = BotEngine(ROOT, ROOT / "config.json")
     api = API(engine)
     api._window = webview.create_window(
@@ -292,7 +307,7 @@ if __name__ == "__main__":
         width=FULL_SIZE[0],
         height=FULL_SIZE[1],
         min_size=(COMPACT_SIZE[0], 420),
-        background_color="#0f0d14",
+        background_color="#050506",
     )
     webview.start()
     engine.stop_all()

@@ -56,6 +56,8 @@ pip install -r requirements.txt
 python src/main.py
 ```
 
+Nas próximas vezes, é só dar dois cliques em **`Abrir painel.pyw`** na pasta do projeto: o painel abre sem a janela preta do terminal.
+
 Depois:
 
 1. Abra o jogo e entre no personagem. O painel procura a janela pelo título `otPokemon | Lisalon | South America`; se o seu for diferente, troque em **Ajustes > Título da janela**.
