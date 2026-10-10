@@ -30,6 +30,29 @@ const PICK_TARGETS = {
   msg_success: "Recortar a mensagem de captura confirmada",
   msg_noball: "Recortar a mensagem de sem pokébola",
 };
+// ícones de traço fino, no mesmo estilo do menu lateral
+const ICONS = {
+  battle: '<path d="M13 3L5 13.5h6L10 21l8-10.5h-6L13 3z"/>',
+  capture: '<circle cx="12" cy="12" r="9"/><path d="M3 12h6M15 12h6"/><circle cx="12" cy="12" r="3"/>',
+  cavebot: '<path d="M9 4L3.5 6.5v13L9 17l6 3 5.5-2.5v-13L15 7 9 4zM9 4v13M15 7v13"/>',
+  heal: '<path d="M12 20s-7.5-4.5-7.5-10A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 7.5 3c0 5.5-7.5 10-7.5 10z"/>',
+  switch: '<path d="M7 4L3.5 7.5 7 11M3.5 7.5h13M17 13l3.5 3.5L17 20M20.5 16.5h-13"/>',
+  combat: '<path d="M12 3l7.5 3v5.5c0 4.5-3.2 8-7.5 9.5-4.3-1.5-7.5-5-7.5-9.5V6z"/>',
+  macro: '<circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l5.5-3.5z"/>',
+  loot: '<rect x="3.5" y="7" width="17" height="13" rx="4"/><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7M3.5 12.5h17M12 11.5v2.5"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  scan: '<path d="M4 8.5V6.5A2.5 2.5 0 0 1 6.5 4h2M15.5 4h2A2.5 2.5 0 0 1 20 6.5v2M20 15.5v2a2.5 2.5 0 0 1-2.5 2.5h-2M8.5 20h-2A2.5 2.5 0 0 1 4 17.5v-2M4 12h16"/>',
+  target: '<circle cx="12" cy="12" r="7.5"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/>',
+  save: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  ok: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  error: '<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5h.01"/>',
+};
+const icon = (name, cls = "ico") => {
+  const span = document.createElement("span");
+  span.innerHTML = `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ""}</svg>`;
+  return span.firstElementChild;
+};
+
 const FKEYS = Array.from({ length: 12 }, (_, i) => `F${i + 1}`);
 
 let api = null;
@@ -67,7 +90,7 @@ function setPath(obj, path, value) {
 function toast(msg, isError = false) {
   let t = $(".toast");
   if (!t) document.body.append((t = el("div", "toast")));
-  t.textContent = msg;
+  t.replaceChildren(icon(isError ? "error" : "ok"), el("span", null, msg));
   t.classList.toggle("error", isError);
   t.classList.add("show");
   clearTimeout(t._t);
@@ -114,6 +137,9 @@ function buildModules(modules) {
     const node = tpl.content.firstElementChild.cloneNode(true);
     $(".m-name", node).textContent = label;
     $(".m-desc", node).textContent = DESCRIPTIONS[name] || "";
+    node.title = DESCRIPTIONS[name] || "";
+    node.dataset.module = name;
+    $(".m-ico", node).append(icon(name));
     const input = $("input", node);
     input.setAttribute("aria-label", `Ligar ${label}`);
     input.addEventListener("change", async () => {
@@ -136,6 +162,7 @@ function buildModules(modules) {
     moduleEls[name] = { node, input, label, state: $(".m-state", node), text: $(".m-text", node), key: $(".m-key", node), up: $(".m-order-up", node), down: $(".m-order-down", node) };
   }
   updateModuleOrderControls();
+  wireModuleDnD();
 
   // filtros do console e campos de atalho seguem a lista de módulos
   const chips = $("#log-filter");
@@ -166,6 +193,48 @@ function updateModuleOrderControls() {
     moduleEls[name].up.disabled = index === 0;
     moduleEls[name].down.disabled = index === nodes.length - 1;
   });
+}
+
+// arrastar os cartões para mudar a ordem (as setas continuam ao passar o mouse)
+function wireModuleDnD() {
+  const box = $("#modules");
+  let dragging = null;
+  box.addEventListener("dragstart", (e) => {
+    const card = e.target.closest?.(".module");
+    if (!card) return;
+    dragging = card;
+    dragging.classList.add("dragging");
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", dragging.dataset.module);
+  });
+  box.addEventListener("dragover", (e) => {
+    if (!dragging) return;
+    e.preventDefault();
+    const over = e.target.closest(".module");
+    if (!over || over === dragging) return;
+    const r = over.getBoundingClientRect();
+    if (e.clientY < r.top + r.height / 2) over.before(dragging);
+    else over.after(dragging);
+  });
+  box.addEventListener("dragend", () => {
+    if (!dragging) return;
+    dragging.classList.remove("dragging");
+    dragging = null;
+    updateModuleOrderControls();
+    saveModuleOrder();
+  });
+}
+
+async function saveModuleOrder() {
+  const order = $$("#modules .module").map((item) => item.dataset.module).filter(Boolean);
+  if (JSON.stringify(order) === JSON.stringify(config.module_order || [])) return;
+  config.module_order = order;
+  try {
+    config = await call("save_config", config);
+    toast("Ordem dos módulos salva");
+  } catch {
+    config = await api.get_config();
+  }
 }
 
 async function moveModule(name, offset) {
@@ -270,7 +339,7 @@ async function poll() {
     const game = $("#h-game");
     game.classList.toggle("ok", s.health.game && s.health.focused);
     game.classList.toggle("warn", s.health.game && !s.health.focused);
-    game.textContent = s.health.game && !s.health.focused ? "Jogo (fora de foco)" : "Jogo";
+    game.textContent = !s.health.game ? "Jogo fechado" : s.health.focused ? "Jogo em foco" : "Jogo atrás de outra janela";
     game.title = !s.health.game
       ? `Janela "${config.window_title}" não encontrada`
       : s.health.focused
@@ -278,6 +347,7 @@ async function poll() {
         : "Jogo aberto, mas outra janela está na frente: os módulos ficam pausados";
     const drv = $("#h-driver");
     drv.classList.toggle("ok", s.health.driver);
+    drv.textContent = s.health.driver ? "Driver OK" : "Driver ausente";
     drv.title = s.health.driver ? "Driver Interception OK" : "Driver Interception não encontrado";
 
     renderTimer(s.timer);
@@ -294,6 +364,9 @@ async function poll() {
 function renderTimer(left) {
   const out = $("#timer-left");
   out.textContent = left == null ? "" : fmtDuration(left);
+  const pill = $("#h-timer");
+  pill.hidden = left == null;
+  pill.textContent = left == null ? "" : `Desliga em ${fmtDuration(left)}`;
   $("#timer-desc").textContent = left == null ? "Desliga tudo sozinho." : "Desliga tudo em";
   if (left == null && !timerEditing && $("#timer-select").value && $("#timer-select").value !== "at") {
     $("#timer-select").value = "";
@@ -636,26 +709,78 @@ function buildCaptureGrid() {
       bell.classList.toggle("on");
     });
 
-    const keyLabel = el("label", "thumb-key-label", "Tecla de captura");
+    const keyLabel = el("label", "thumb-key-label");
     const keyInput = el("input", "thumb-key poke-key");
     keyInput.type = "text";
     keyInput.maxLength = 3;
     keyInput.placeholder = config.capture.key || "1";
     keyInput.value = config.capture.keys?.[img.name] || "";
     keyInput.dataset.pokemon = img.name;
-    keyInput.title = `Tecla para capturar ${name}; vazio usa ${config.capture.key || "1"}`;
+    keyInput.title = `Tecla para capturar ${name} (clique para trocar; vazio usa ${config.capture.key || "1"})`;
+    keyInput.setAttribute("aria-label", keyInput.title);
+    keyInput.classList.toggle("custom", Boolean(keyInput.value));
+    keyInput.addEventListener("input", () => keyInput.classList.toggle("custom", Boolean(keyInput.value.trim())));
     keyInput.addEventListener("click", (ev) => ev.stopPropagation());
     keyInput.addEventListener("keydown", (ev) => ev.stopPropagation());
     keyLabel.addEventListener("click", (ev) => ev.stopPropagation());
     keyLabel.append(keyInput);
 
     t.append(rm, pic, el("span", "n", name), bell, keyLabel);
-    const toggle = () => t.classList.toggle("on");
+    const toggle = () => {
+      t.classList.toggle("on");
+      updateCaptureCount();
+    };
     t.addEventListener("click", toggle);
     t.addEventListener("keydown", (ev) => (ev.key === "Enter" || ev.key === " ") && ev.target === t && (ev.preventDefault(), toggle()));
     grid.append(t);
   }
   if (!images.capture.length) grid.append(el("p", "hint", "Nenhuma imagem em imags/captura."));
+  filterCapture();
+}
+
+function filterCapture() {
+  const q = $("#capture-search").value.trim().toLowerCase();
+  for (const t of $$("#capture-grid .thumb")) t.hidden = Boolean(q) && !pretty(t.dataset.name).toLowerCase().includes(q);
+  updateCaptureCount();
+}
+
+function updateCaptureCount() {
+  const all = $$("#capture-grid .thumb");
+  $("#capture-count").textContent = all.length ? `${all.filter((t) => t.classList.contains("on")).length} de ${all.length} marcados` : "";
+}
+
+function wireCaptureTools() {
+  $("#capture-search").addEventListener("input", filterCapture);
+  const mark = (on) => {
+    for (const t of $$("#capture-grid .thumb:not([hidden])")) t.classList.toggle("on", on);
+    updateCaptureCount();
+  };
+  $("#capture-all").addEventListener("click", () => mark(true));
+  $("#capture-none").addEventListener("click", () => mark(false));
+}
+
+// mini menu da aba Ajustes: um botão para cada seção
+function buildSettingsJump() {
+  const nav = $("#settings-jump");
+  for (const h of $$("#tab-settings > .sub-title")) {
+    const b = el("button", "chip", h.textContent);
+    b.type = "button";
+    b.addEventListener("click", () => h.scrollIntoView({ behavior: "smooth", block: "start" }));
+    nav.append(b);
+  }
+}
+
+// mesmos ícones do menu nos botões principais
+function decorateButtons() {
+  const add = (sel, name) => $$(sel).forEach((b) => !b.querySelector(".ico") && b.prepend(icon(name)));
+  add(".save", "save");
+  add("[data-test]", "scan");
+  add("#add-poke, #battle-target-add, #add-waypoint", "plus");
+  add("[data-pick], #battle-empty-pick, [data-msg-pick]", "target");
+  for (const b of $$("#add-poke, #battle-target-add, #add-waypoint")) {
+    const txt = [...b.childNodes].find((n) => n.nodeType === 3);
+    if (txt) txt.textContent = txt.textContent.replace(/^\s*\+\s*/, " ");
+  }
 }
 
 function buildBattleTargetGrid() {
@@ -1019,6 +1144,12 @@ function barChart(box, data, { value, format, label }) {
   const bw = Math.max(4, Math.min(22, step - 4));
 
   const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}` });
+  const gid = `grad-${box.id}`;
+  const defs = svgEl("defs");
+  const grad = svgEl("linearGradient", { id: gid, x1: 0, y1: 0, x2: 0, y2: 1 });
+  grad.append(svgEl("stop", { offset: "0%", class: "g-top" }), svgEl("stop", { offset: "100%", class: "g-bottom" }));
+  defs.append(grad);
+  svg.append(defs);
   const grid = svgEl("g", { class: "grid" });
   for (const f of [0, 0.5, 1]) {
     const y = pad.t + ih - f * ih;
@@ -1040,7 +1171,7 @@ function barChart(box, data, { value, format, label }) {
     // topo arredondado, base reta apoiada no eixo
     const r = Math.min(4, bw / 2, h);
     const shape = h > 0 ? `M${x},${pad.t + ih} V${y + r} Q${x},${y} ${x + r},${y} H${x + bw - r} Q${x + bw},${y} ${x + bw},${y + r} V${pad.t + ih} Z` : "";
-    const bar = svgEl("path", { class: "bar" + (i === data.length - 1 ? " today" : ""), d: shape });
+    const bar = svgEl("path", { class: "bar" + (i === data.length - 1 ? " today" : ""), d: shape, style: `fill: url(#${gid})` });
     hit.addEventListener("mousemove", (e) => {
       tip.hidden = false;
       tip.innerHTML = "";
@@ -1065,6 +1196,20 @@ const dayLabel = (d) => {
   const dt = new Date(+y, +m - 1, +day);
   return dt.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" });
 };
+
+// resumo da sessão no topo do painel
+async function refreshSummary() {
+  try {
+    const s = await api.get_stats();
+    $("#sum-time").textContent = fmtDuration(Object.values(s.session.run_seconds).reduce((a, b) => a + b, 0));
+    $("#sum-kills").textContent = s.session.kills;
+    $("#sum-balls").textContent = Object.values(s.session.balls).reduce((a, b) => a + b, 0);
+  } catch (e) {
+    console.error(e);
+  } finally {
+    setTimeout(refreshSummary, 5000);
+  }
+}
 
 let statsTimer = null;
 async function refreshStats() {
@@ -1608,7 +1753,11 @@ async function init() {
   await renderMacroList(config.macro?.name);
   applyConfig();
   wireUi();
+  wireCaptureTools();
+  buildSettingsJump();
+  decorateButtons();
   poll();
+  refreshSummary();
   setTimeout(checkVersion, 1500);
   setTimeout(checkVersion, 9000);
 }
