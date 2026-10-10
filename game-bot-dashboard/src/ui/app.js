@@ -156,12 +156,9 @@ function buildModules(modules) {
       config.macro.loop = $("#macro-loop").checked;
     }
     });
-    $(".m-order-up", node).addEventListener("click", () => moveModule(name, -1));
-    $(".m-order-down", node).addEventListener("click", () => moveModule(name, 1));
     $("#modules").append(node);
-    moduleEls[name] = { node, input, label, state: $(".m-state", node), text: $(".m-text", node), key: $(".m-key", node), up: $(".m-order-up", node), down: $(".m-order-down", node) };
+    moduleEls[name] = { node, input, label, state: $(".m-state", node), text: $(".m-text", node), key: $(".m-key", node) };
   }
-  updateModuleOrderControls();
   wireModuleDnD();
 
   // filtros do console e campos de atalho seguem a lista de módulos
@@ -185,17 +182,7 @@ function buildModules(modules) {
   }
 }
 
-function updateModuleOrderControls() {
-  const nodes = $$("#modules .module");
-  nodes.forEach((node, index) => {
-    const name = Object.keys(moduleEls).find((key) => moduleEls[key].node === node);
-    if (!name) return;
-    moduleEls[name].up.disabled = index === 0;
-    moduleEls[name].down.disabled = index === nodes.length - 1;
-  });
-}
-
-// arrastar os cartões para mudar a ordem (as setas continuam ao passar o mouse)
+// arrastar os cartões para mudar a ordem
 function wireModuleDnD() {
   const box = $("#modules");
   let dragging = null;
@@ -220,7 +207,6 @@ function wireModuleDnD() {
     if (!dragging) return;
     dragging.classList.remove("dragging");
     dragging = null;
-    updateModuleOrderControls();
     saveModuleOrder();
   });
 }
@@ -234,34 +220,6 @@ async function saveModuleOrder() {
     toast("Ordem dos módulos salva");
   } catch {
     config = await api.get_config();
-  }
-}
-
-async function moveModule(name, offset) {
-  const node = moduleEls[name]?.node;
-  if (!node) return;
-  const nodes = $$("#modules .module");
-  const index = nodes.indexOf(node);
-  const destination = index + offset;
-  if (destination < 0 || destination >= nodes.length) return;
-  const neighbor = nodes[destination];
-  if (offset < 0) neighbor.before(node);
-  else neighbor.after(node);
-  updateModuleOrderControls();
-  config.module_order = $$("#modules .module").map((item) =>
-    Object.keys(moduleEls).find((key) => moduleEls[key].node === item)
-  ).filter(Boolean);
-  try {
-    config = await call("save_config", config);
-    toast("Ordem dos módulos salva");
-  } catch (error) {
-    toast(error.message || "Não foi possível salvar a ordem", true);
-    config = await api.get_config();
-    const saved = Array.isArray(config.module_order) ? config.module_order : [];
-    const validNames = Object.keys(moduleEls);
-    const order = [...saved.filter((key) => validNames.includes(key)), ...validNames.filter((key) => !saved.includes(key))];
-    order.forEach((key) => $("#modules").append(moduleEls[key].node));
-    updateModuleOrderControls();
   }
 }
 
