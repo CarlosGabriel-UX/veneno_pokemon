@@ -59,6 +59,7 @@ let api = null;
 let config = null;
 let images = null;
 let lastSeq = 0;
+let configRev = null;
 let pickKey = "F8";
 let pickHandled = null;
 let pendingPokemonName = "";
@@ -156,12 +157,9 @@ function buildModules(modules) {
       config.macro.loop = $("#macro-loop").checked;
     }
     });
-    $(".m-order-up", node).addEventListener("click", () => moveModule(name, -1));
-    $(".m-order-down", node).addEventListener("click", () => moveModule(name, 1));
     $("#modules").append(node);
-    moduleEls[name] = { node, input, label, state: $(".m-state", node), text: $(".m-text", node), key: $(".m-key", node), up: $(".m-order-up", node), down: $(".m-order-down", node) };
+    moduleEls[name] = { node, input, label, state: $(".m-state", node), text: $(".m-text", node), key: $(".m-key", node) };
   }
-  updateModuleOrderControls();
   wireModuleDnD();
 
   // filtros do console e campos de atalho seguem a lista de módulos
@@ -185,17 +183,7 @@ function buildModules(modules) {
   }
 }
 
-function updateModuleOrderControls() {
-  const nodes = $$("#modules .module");
-  nodes.forEach((node, index) => {
-    const name = Object.keys(moduleEls).find((key) => moduleEls[key].node === node);
-    if (!name) return;
-    moduleEls[name].up.disabled = index === 0;
-    moduleEls[name].down.disabled = index === nodes.length - 1;
-  });
-}
-
-// arrastar os cartões para mudar a ordem (as setas continuam ao passar o mouse)
+// arrastar os cartões para mudar a ordem
 function wireModuleDnD() {
   const box = $("#modules");
   let dragging = null;
@@ -220,7 +208,6 @@ function wireModuleDnD() {
     if (!dragging) return;
     dragging.classList.remove("dragging");
     dragging = null;
-    updateModuleOrderControls();
     saveModuleOrder();
   });
 }
@@ -234,34 +221,6 @@ async function saveModuleOrder() {
     toast("Ordem dos módulos salva");
   } catch {
     config = await api.get_config();
-  }
-}
-
-async function moveModule(name, offset) {
-  const node = moduleEls[name]?.node;
-  if (!node) return;
-  const nodes = $$("#modules .module");
-  const index = nodes.indexOf(node);
-  const destination = index + offset;
-  if (destination < 0 || destination >= nodes.length) return;
-  const neighbor = nodes[destination];
-  if (offset < 0) neighbor.before(node);
-  else neighbor.after(node);
-  updateModuleOrderControls();
-  config.module_order = $$("#modules .module").map((item) =>
-    Object.keys(moduleEls).find((key) => moduleEls[key].node === item)
-  ).filter(Boolean);
-  try {
-    config = await call("save_config", config);
-    toast("Ordem dos módulos salva");
-  } catch (error) {
-    toast(error.message || "Não foi possível salvar a ordem", true);
-    config = await api.get_config();
-    const saved = Array.isArray(config.module_order) ? config.module_order : [];
-    const validNames = Object.keys(moduleEls);
-    const order = [...saved.filter((key) => validNames.includes(key)), ...validNames.filter((key) => !saved.includes(key))];
-    order.forEach((key) => $("#modules").append(moduleEls[key].node));
-    updateModuleOrderControls();
   }
 }
 
@@ -302,6 +261,14 @@ async function poll() {
   try {
     const s = await api.get_state(lastSeq);
     if (s.logs.length) lastSeq = s.logs[s.logs.length - 1].seq;
+    if (configRev === null) configRev = s.config_rev;
+    else if (s.config_rev !== configRev) {
+      // o celular trocou o perfil: recarrega para o Salvar daqui não desfazer a troca
+      configRev = s.config_rev;
+      config = await api.get_config();
+      applyConfig();
+      toast(`Perfil "${config.profile || ""}" carregado pelo celular`);
+    }
     appendLogs(s.logs);
     $("#route-record").disabled = Boolean(s.route_recording);
     $("#route-record-stop").disabled = !s.route_recording;
@@ -1286,6 +1253,53 @@ async function renderProfiles() {
   $("#profile-delete").disabled = !config.profile;
 }
 
+// ---------- celular ----------
+function renderRemote(info) {
+  $("#remote-enabled").checked = info.enabled;
+  const live = info.enabled && info.running;
+  const url = info.urls[0] || info.tailscale[0] || "";
+  $("#remote-details").hidden = !live;
+  $("#remote-qr").hidden = !live || !url;
+  $("#remote-error").hidden = !info.error && (!live || url);
+  $("#remote-error").textContent = info.error || (live && !url ? "Não achei o IP deste PC na rede. Confira se o Wi-Fi ou o cabo está conectado." : "");
+  if (!live) return;
+  $("#remote-url").textContent = url || "—";
+  $("#remote-pin").textContent = info.pin;
+  const tail = info.tailscale.filter((u) => u !== url);
+  $("#remote-tailscale").hidden = !tail.length;
+  $("#remote-tailscale").textContent = tail.length ? `Fora de casa, com a Tailscale ligada no celular: ${tail.join(", ")}` : "";
+  if (url && window.qrcode) {
+    // o PIN vai depois do #, que o navegador não envia pela rede
+    const qr = qrcode(0, "M");
+    qr.addData(`${url}/#pin=${info.pin}`);
+    qr.make();
+    $("#remote-qr").innerHTML = qr.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
+  }
+}
+
+function wireRemote() {
+  $("#remote-enabled").addEventListener("change", async (e) => {
+    const info = await call("set_remote", e.target.checked).catch(() => null);
+    if (!info) return (e.target.checked = !e.target.checked);
+    renderRemote(info);
+    if (info.enabled && info.running) toast("Controle pelo celular ligado");
+  });
+  $("#remote-new-pin").addEventListener("click", async () => {
+    if (!confirm("Gerar outro PIN? O celular que já está conectado vai pedir o PIN novo.")) return;
+    renderRemote(await call("new_remote_pin"));
+    toast("PIN novo gerado");
+  });
+  $("#remote-copy").addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText($("#remote-url").textContent);
+      toast("Endereço copiado");
+    } catch {
+      toast("Não consegui copiar; selecione o endereço e use Ctrl+C", true);
+    }
+  });
+  api.get_remote().then(renderRemote).catch(() => {});
+}
+
 // ---------- versão ----------
 async function checkVersion() {
   const v = await api.get_version();
@@ -1754,6 +1768,7 @@ async function init() {
   applyConfig();
   wireUi();
   wireCaptureTools();
+  wireRemote();
   buildSettingsJump();
   decorateButtons();
   poll();

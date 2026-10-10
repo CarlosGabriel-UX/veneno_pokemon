@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050506">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Veneno">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<title>Veneno do Pokémon</title>
+<style>
+@font-face { font-family: "Poppins"; font-weight: 400; font-display: swap; src: url("fonts/Poppins-Regular.ttf") format("truetype"); }
+@font-face { font-family: "Poppins"; font-weight: 500; font-display: swap; src: url("fonts/Poppins-Medium.ttf") format("truetype"); }
+@font-face { font-family: "Poppins"; font-weight: 600; font-display: swap; src: url("fonts/Poppins-SemiBold.ttf") format("truetype"); }
+:root {
+  --bg: #050506; --surface: #121214; --surface-2: #1a1a1d;
+  --glass: linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.018) 38%, rgba(255,255,255,.012));
+  --edge: rgba(255,255,255,.085); --line: rgba(255,255,255,.075);
+  --text: #f3f3f5; --muted: #8d8d94;
+  --accent: #b14dff; --accent-soft: rgba(177,77,255,.16); --glow: rgba(177,77,255,.55);
+  --on: #8fe05a; --on-soft: rgba(143,224,90,.12); --warn: #f2c14e; --danger: #ff5d6c;
+  --font: "Poppins", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; min-height: 100%; }
+body {
+  background: radial-gradient(70% 40% at 85% -6%, rgba(255,255,255,.10), transparent 70%),
+              radial-gradient(60% 30% at 0% 100%, rgba(177,77,255,.08), transparent 70%), var(--bg);
+  background-attachment: fixed;
+  color: var(--text); font: 14px/1.45 var(--font);
+  padding: max(14px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom));
+}
+[hidden] { display: none !important; }
+button, input, select { font: inherit; color: inherit; }
+.wrap { max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+.card { background: var(--glass), var(--surface); border: 1px solid var(--edge); border-radius: 20px; padding: 14px 16px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.07); }
+h1 { font-size: 17px; font-weight: 600; margin: 0; letter-spacing: .1px; }
+h2 { font-size: 12px; font-weight: 500; color: var(--muted); margin: 0 0 10px; text-transform: uppercase; letter-spacing: .8px; }
+.muted { color: var(--muted); }
+
+header { display: flex; align-items: center; gap: 12px; padding: 2px 2px 0; }
+.logo { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; flex: none;
+  background: linear-gradient(160deg, #c06bff, #7a1fd1); box-shadow: 0 6px 18px -6px var(--glow); }
+.logo svg { width: 22px; height: 22px; }
+header .grow { flex: 1; min-width: 0; }
+#conn { font-size: 12px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 99px; font-size: 12px; font-weight: 500;
+  background: rgba(255,255,255,.06); color: var(--muted); border: 1px solid var(--line); white-space: nowrap; }
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.pill.ok { color: var(--on); background: var(--on-soft); border-color: rgba(143,224,90,.25); }
+.pill.warn { color: var(--warn); background: rgba(242,193,78,.1); border-color: rgba(242,193,78,.25); }
+.pill.bad { color: var(--danger); background: rgba(255,93,108,.1); border-color: rgba(255,93,108,.25); }
+.health { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.kpi { text-align: center; padding: 10px 4px; border-radius: 14px; background: rgba(0,0,0,.25); border: 1px solid var(--line); }
+.kpi b { display: block; font-size: 17px; font-weight: 600; white-space: nowrap; }
+.kpi span { font-size: 11px; color: var(--muted); }
+
+.mod { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-top: 1px solid var(--line); }
+.mod:first-of-type { border-top: 0; padding-top: 2px; }
+.mod .dot { width: 9px; height: 9px; border-radius: 50%; background: #3a3a40; flex: none; }
+.mod.on .dot { background: var(--on); box-shadow: 0 0 10px var(--on); }
+.mod .txt { flex: 1; min-width: 0; }
+.mod .name { font-weight: 600; }
+.mod .st { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.switch { position: relative; width: 52px; height: 30px; flex: none; }
+.switch input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; z-index: 1; }
+.switch span { position: absolute; inset: 0; border-radius: 99px; background: #2c2c31; box-shadow: inset 0 1px 2px rgba(0,0,0,.5); transition: background .2s; }
+.switch span::before { content: ""; position: absolute; width: 24px; height: 24px; left: 3px; top: 3px; border-radius: 50%; background: #fff; transition: transform .2s; }
+.switch input:checked + span { background: linear-gradient(180deg, #c06bff, #9a33f0); box-shadow: 0 0 14px -2px var(--glow); }
+.switch input:checked + span::before { transform: translateX(22px); }
+.switch input:disabled + span { opacity: .5; }
+
+.btn { border: 1px solid var(--edge); background: var(--surface-2); border-radius: 14px; padding: 11px 14px; font-weight: 500; cursor: pointer; min-height: 44px; }
+.btn:active { transform: scale(.98); }
+.btn.primary { background: linear-gradient(180deg, #c06bff, #9a33f0); border-color: transparent; font-weight: 600; box-shadow: 0 8px 22px -10px var(--glow); }
+.btn.stop { width: 100%; background: linear-gradient(180deg, #ff6e7c, #e0394b); border-color: transparent; font-weight: 600; font-size: 15px; min-height: 52px;
+  box-shadow: 0 10px 24px -12px rgba(255,93,108,.8); }
+.row { display: flex; gap: 8px; align-items: center; }
+.row > * { flex: 1; }
+select { width: 100%; background: rgba(0,0,0,.38); border: 1px solid var(--edge); border-radius: 14px; padding: 10px 12px; min-height: 44px; }
+.chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.chips .btn { padding: 10px 4px; }
+#timer-left { font-weight: 600; color: var(--accent); }
+
+#logs { font: 12px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace; max-height: 230px; overflow-y: auto; margin: 0; padding: 0; list-style: none; }
+#logs li { padding: 3px 0; border-top: 1px solid rgba(255,255,255,.04); overflow-wrap: anywhere; }
+#logs .t { color: var(--muted); margin-right: 6px; }
+#logs .error { color: var(--danger); } #logs .warn { color: var(--warn); } #logs .success { color: var(--on); }
+
+/* PIN */
+.login { min-height: 80vh; display: grid; place-items: center; }
+.login .card { width: 100%; max-width: 360px; text-align: center; padding: 26px 20px; }
+.login .logo { margin: 0 auto 14px; width: 52px; height: 52px; border-radius: 16px; }
+.login p { margin: 6px 0 18px; }
+#pin { width: 100%; text-align: center; font-size: 28px; letter-spacing: 12px; padding: 12px; border-radius: 16px;
+  background: rgba(0,0,0,.38); border: 1px solid var(--edge); outline: none; margin-bottom: 12px; }
+#pin:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+#pin-err { color: var(--danger); min-height: 20px; font-size: 13px; margin: 0 0 8px; }
+.login .btn { width: 100%; }
+
+.toast { position: fixed; left: 50%; bottom: max(18px, env(safe-area-inset-bottom)); transform: translate(-50%, 20px); opacity: 0;
+  background: #222226; border: 1px solid var(--edge); padding: 10px 16px; border-radius: 14px; transition: .25s; pointer-events: none; max-width: calc(100% - 32px); }
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+.toast.err { border-color: rgba(255,93,108,.5); color: #ffb3bb; }
+.foot { text-align: center; font-size: 12px; }
+.foot button { background: none; border: 0; color: var(--muted); text-decoration: underline; padding: 8px; cursor: pointer; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute"><symbol id="logo" viewBox="0 0 24 24"><path fill="#fff" d="M12 2.5c3.6 4 6.5 7.6 6.5 11.3a6.5 6.5 0 0 1-13 0C5.5 10.1 8.4 6.5 12 2.5Zm-2.2 11.2a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6Zm4.6-2.4a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z"/></symbol></svg>
+
+<div class="login" id="login" hidden>
+  <form class="card" id="login-form" autocomplete="off">
+    <div class="logo"><svg><use href="#logo"/></svg></div>
+    <h1>Veneno do Pokémon</h1>
+    <p class="muted">Digite o PIN que aparece no painel do PC, em Ajustes &gt; Celular.</p>
+    <input id="pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" aria-label="PIN de 6 dígitos" placeholder="••••••">
+    <p id="pin-err" role="alert"></p>
+    <button class="btn primary" type="submit">Entrar</button>
+  </form>
+</div>
+
+<div class="wrap" id="app" hidden>
+  <header>
+    <div class="logo"><svg><use href="#logo"/></svg></div>
+    <div class="grow">
+      <h1 id="title">Veneno do Pokémon</h1>
+      <div id="conn" class="muted">Conectando…</div>
+    </div>
+    <span class="pill" id="running-pill">Parado</span>
+  </header>
+
+  <section class="card">
+    <div class="health">
+      <span class="pill" id="h-game">Jogo</span>
+      <span class="pill" id="h-driver">Driver</span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Sessão</h2>
+    <div class="kpis">
+      <div class="kpi"><b id="k-time">0min</b><span>Aberto</span></div>
+      <div class="kpi"><b id="k-kills">0</b><span>Batalhas</span></div>
+      <div class="kpi"><b id="k-balls">0</b><span>Pokébolas</span></div>
+      <div class="kpi"><b id="k-caught">0</b><span>Capturas</span></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Módulos</h2>
+    <div id="modules"></div>
+  </section>
+
+  <button class="btn stop" id="stop-all">Parar tudo</button>
+
+  <section class="card">
+    <h2>Timer <span id="timer-left"></span></h2>
+    <div class="chips">
+      <button class="btn" data-min="30">30 min</button>
+      <button class="btn" data-min="60">1 h</button>
+      <button class="btn" data-min="120">2 h</button>
+      <button class="btn" data-min="0">Sem</button>
+    </div>
+  </section>
+
+  <section class="card" id="profiles-card" hidden>
+    <h2>Perfil</h2>
+    <div class="row">
+      <select id="profile" aria-label="Perfil"></select>
+      <button class="btn primary" id="profile-load" style="flex:none">Carregar</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Console</h2>
+    <ul id="logs"></ul>
+  </section>
+
+  <div class="foot"><button id="logout">Sair deste celular</button></div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const PIN_KEY = "veneno.pin";
+let pin = "";
+let lastSeq = 0;
+let modules = [];
+let busy = new Set();
+let timer = null;
+let fails = 0;
+
+function storeGet() { try { return localStorage.getItem(PIN_KEY) || ""; } catch { return ""; } }
+function storeSet(v) { try { v ? localStorage.setItem(PIN_KEY, v) : localStorage.removeItem(PIN_KEY); } catch {} }
+
+function toast(msg, err = false) {
+  const t = $("#toast");
+  t.textContent = msg;
+  t.classList.toggle("err", err);
+  t.classList.add("show");
+  clearTimeout(t._t);
+  t._t = setTimeout(() => t.classList.remove("show"), err ? 3500 : 1800);
+}
+
+class AuthError extends Error {}
+
+async function api(path, body) {
+  const opts = { headers: { "X-Pin": pin }, cache: "no-store" };
+  if (body !== undefined) {
+    opts.method = "POST";
+    opts.headers["Content-Type"] = "application/json";
+    opts.body = JSON.stringify(body);
+  }
+  const r = await fetch(path, opts);
+  const data = await r.json().catch(() => ({}));
+  if (r.status === 401 || r.status === 429) throw new AuthError(data.error || "PIN incorreto.");
+  if (!r.ok) throw new Error(data.error || `Erro ${r.status}`);
+  return data;
+}
+
+function showLogin(msg = "") {
+  clearTimeout(timer);
+  $("#app").hidden = true;
+  $("#login").hidden = false;
+  $("#pin-err").textContent = msg;
+  $("#pin").value = "";
+  $("#pin").focus();
+}
+
+async function enter(candidate) {
+  pin = candidate;
+  try {
+    const info = await api("/api/info");
+    storeSet(pin);
+    $("#login").hidden = true;
+    $("#app").hidden = false;
+    setup(info);
+    lastSeq = 0;
+    $("#logs").replaceChildren();
+    poll();
+  } catch (e) {
+    pin = "";
+    showLogin(e instanceof AuthError ? e.message : "Não consegui falar com o PC. Ele está ligado e na mesma rede?");
+  }
+}
+
+function setup(info) {
+  modules = info.modules;
+  const box = $("#modules");
+  box.replaceChildren();
+  for (const m of modules) {
+    const row = document.createElement("div");
+    row.className = "mod";
+    row.dataset.id = m.id;
+    row.innerHTML = '<span class="dot"></span><div class="txt"><div class="name"></div><div class="st">Parado</div></div>' +
+      '<label class="switch"><input type="checkbox"><span></span></label>';
+    row.querySelector(".name").textContent = m.name;
+    const input = row.querySelector("input");
+    input.setAttribute("aria-label", `Ligar ${m.name}`);
+    input.addEventListener("change", () => toggle(m, input));
+    box.append(row);
+  }
+  const sel = $("#profile");
+  sel.replaceChildren(new Option("Escolha um perfil", ""));
+  for (const p of info.profiles) sel.append(new Option(p, p, false, p === info.profile));
+  $("#profiles-card").hidden = !info.profiles.length;
+}
+
+async function toggle(m, input) {
+  const on = input.checked;
+  busy.add(m.id);
+  input.disabled = true;
+  try {
+    const r = await api("/api/toggle", { name: m.id, on });
+    if (on && !r.running) {
+      input.checked = false;
+      toast(`${m.name} não ligou. Veja o console.`, true);
+    } else {
+      toast(on ? `${m.name} ligado` : `${m.name} desligado`);
+    }
+  } catch (e) {
+    input.checked = !on;
+    if (e instanceof AuthError) return showLogin(e.message);
+    toast(e.message, true);
+  } finally {
+    busy.delete(m.id);
+    input.disabled = false;
+  }
+}
+
+function fmtTime(s) {
+  s = Math.max(0, Math.round(s));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  return h ? `${h}h ${String(m).padStart(2, "0")}` : `${m}min`;
+}
+
+function setPill(node, cls, text) {
+  node.className = "pill" + (cls ? " " + cls : "");
+  node.textContent = text;
+}
+
+function render(s) {
+  let count = 0;
+  for (const row of document.querySelectorAll(".mod")) {
+    const id = row.dataset.id;
+    const macro = id === "macro" && (s.macro?.playing || s.macro?.recording);
+    const route = id === "cavebot" && s.route_recording;
+    const running = Boolean(s.running[id]);
+    const active = running || macro || route;
+    if (active) count++;
+    row.classList.toggle("on", active);
+    const input = row.querySelector("input");
+    if (!busy.has(id)) input.checked = running;
+    let st = running ? (s.status[id] || "Rodando") : "Parado";
+    if (id === "macro" && s.macro?.recording) st = "Gravando rota";
+    else if (id === "macro" && s.macro?.playing) st = s.macro.paused ? "Pausado" : `Reproduzindo ${s.macro.name || ""}`;
+    else if (route) st = "Gravando pontos do mapa";
+    row.querySelector(".st").textContent = st;
+  }
+  setPill($("#running-pill"), count ? "ok" : "", count === 0 ? "Parado" : count === 1 ? "1 rodando" : `${count} rodando`);
+
+  const h = s.health || {};
+  if (!h.game) setPill($("#h-game"), "bad", "Jogo fechado");
+  else if (!h.focused) setPill($("#h-game"), "warn", "Jogo atrás de outra janela");
+  else setPill($("#h-game"), "ok", "Jogo em foco");
+  setPill($("#h-driver"), h.driver ? "ok" : "bad", h.driver ? "Driver OK" : "Driver ausente");
+
+  $("#timer-left").textContent = s.timer ? `· desliga em ${fmtTime(s.timer)}` : "";
+  const ss = s.session || {};
+  $("#k-time").textContent = fmtTime(ss.seconds_open || 0);
+  $("#k-kills").textContent = ss.kills ?? 0;
+  $("#k-balls").textContent = ss.balls ?? 0;
+  $("#k-caught").textContent = ss.caught ?? 0;
+  if (s.profile && $("#profile").value !== s.profile && document.activeElement !== $("#profile")) $("#profile").value = s.profile;
+
+  const list = $("#logs");
+  const stick = list.scrollTop + list.clientHeight >= list.scrollHeight - 20;
+  for (const l of s.logs) {
+    const li = document.createElement("li");
+    li.className = l.level;
+    const t = document.createElement("span");
+    t.className = "t";
+    t.textContent = l.time;
+    li.append(t, document.createTextNode(l.msg));
+    list.append(li);
+  }
+  while (list.children.length > 120) list.firstChild.remove();
+  if (stick) list.scrollTop = list.scrollHeight;
+}
+
+async function poll() {
+  clearTimeout(timer);
+  try {
+    const s = await api(`/api/state?since=${lastSeq}`);
+    if (s.logs.length) lastSeq = s.logs[s.logs.length - 1].seq;
+    render(s);
+    fails = 0;
+    $("#conn").textContent = "Conectado ao PC";
+    $("#conn").style.color = "";
+  } catch (e) {
+    if (e instanceof AuthError) return showLogin(e.message);
+    fails++;
+    $("#conn").textContent = "Sem conexão com o PC. Tentando de novo…";
+    $("#conn").style.color = "var(--warn)";
+  }
+  timer = setTimeout(poll, document.hidden ? 5000 : fails ? 3000 : 1500);
+}
+
+$("#login-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const v = $("#pin").value.trim();
+  if (!/^\d{6}$/.test(v)) return ($("#pin-err").textContent = "O PIN tem 6 números.");
+  enter(v);
+});
+$("#pin").addEventListener("input", (e) => {
+  e.target.value = e.target.value.replace(/\D/g, "").slice(0, 6);
+  if (e.target.value.length === 6) enter(e.target.value);
+});
+$("#stop-all").addEventListener("click", async () => {
+  try {
+    await api("/api/stop_all", {});
+    toast("Tudo parado");
+    poll();
+  } catch (e) {
+    if (e instanceof AuthError) return showLogin(e.message);
+    toast(e.message, true);
+  }
+});
+for (const b of document.querySelectorAll("[data-min]")) {
+  b.addEventListener("click", async () => {
+    const minutes = Number(b.dataset.min);
+    try {
+      await api("/api/timer", { minutes });
+      toast(minutes ? `Desliga tudo em ${b.textContent}` : "Timer cancelado");
+      poll();
+    } catch (e) {
+      if (e instanceof AuthError) return showLogin(e.message);
+      toast(e.message, true);
+    }
+  });
+}
+$("#profile-load").addEventListener("click", async () => {
+  const name = $("#profile").value;
+  if (!name) return toast("Escolha um perfil", true);
+  if (!confirm(`Carregar o perfil "${name}"? Os módulos ligados serão parados.`)) return;
+  try {
+    await api("/api/profile", { name });
+    toast(`Perfil "${name}" carregado`);
+    setup(await api("/api/info"));
+  } catch (e) {
+    if (e instanceof AuthError) return showLogin(e.message);
+    toast(e.message, true);
+  }
+});
+$("#logout").addEventListener("click", () => {
+  storeSet("");
+  pin = "";
+  showLogin();
+});
+document.addEventListener("visibilitychange", () => !document.hidden && pin && poll());
+
+// O QR code do painel traz o PIN depois do # (não vai para a rede); guardamos e limpamos a barra.
+function pinFromHash() {
+  const found = (location.hash.match(/pin=(\d{6})/) || [])[1];
+  if (found) history.replaceState(null, "", location.pathname);
+  return found;
+}
+window.addEventListener("hashchange", () => {
+  const found = pinFromHash();
+  if (found) enter(found);
+});
+const saved = pinFromHash() || storeGet();
+saved ? enter(saved) : showLogin();
+</script>
+</body>
+</html>

@@ -17,6 +17,7 @@ if sys.stdout is None or sys.stderr is None:
 import webview
 
 from engine import MODULES, PANEL_TITLE, PICK_HOTKEY, BotEngine
+from remote import RemoteServer
 
 VERSION = "1.1.0"
 REPO = "Lis-Alon/Veneno_do_pokemon"
@@ -87,6 +88,7 @@ class API:
         self._window = None
         self._full_size = FULL_SIZE
         self._update = None
+        self._remote = None
         threading.Thread(target=self._check_update, daemon=True).start()
 
     def _check_update(self):
@@ -98,6 +100,7 @@ class API:
     def get_state(self, since=0):
         state = self._engine.state(since)
         state["macro"] = self._engine.macro_state()
+        state["config_rev"] = self._remote.config_rev if self._remote else 0
         return state
 
     def toggle_module(self, name, state, macro_name=None, macro_loop=False):
@@ -275,6 +278,16 @@ class API:
     def open_logs_folder(self):
         self._engine.open_logs_folder()
 
+    # celular
+    def get_remote(self):
+        return self._remote.info()
+
+    def set_remote(self, enabled):
+        return self._remote.set_enabled(enabled)
+
+    def new_remote_pin(self):
+        return self._remote.new_pin()
+
     # versão
     def get_version(self):
         return {"current": VERSION, "update": self._update}
@@ -305,6 +318,7 @@ if __name__ == "__main__":
         sys.exit(0)
     engine = BotEngine(ROOT, ROOT / "config.json")
     api = API(engine)
+    api._remote = RemoteServer(api, engine, ROOT)
     api._window = webview.create_window(
         PANEL_TITLE,
         UI_URL,
@@ -315,4 +329,5 @@ if __name__ == "__main__":
         background_color="#0f0d14",
     )
     webview.start()
+    api._remote.stop()
     engine.stop_all()
