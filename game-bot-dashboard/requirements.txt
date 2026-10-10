@@ -1,7 +1,9 @@
-pywebview
-pyautogui
-opencv-python
-pillow
+pywebview==6.2.1
+pyautogui==0.9.54
+opencv-python==5.0.0.93
+numpy==2.5.3
+pillow==12.3.0
 interception-python==1.13.6
-pywin32
-pygetwindow
+pywin32==312
+pygetwindow==0.0.9
+mss==9.0.2

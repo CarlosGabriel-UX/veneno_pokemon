@@ -1,5 +1,5 @@
-"""Motor do bot: os mesmos módulos dos scripts da raiz (battle.py, captura.py,
-cave bot.py), mas rodando em threads que podem ser ligadas/desligadas pelo painel."""
+"""Motor do bot: os módulos (batalha, captura, cavebot, cura...) rodando em threads
+que podem ser ligadas/desligadas pelo painel."""
 
 import base64
 import copy
@@ -28,6 +28,11 @@ except Exception as e:  # pragma: no cover
     PG_ERROR = str(e)
 
 try:
+    import mss
+except Exception:  # pragma: no cover
+    mss = None
+
+try:
     import interception as ic
     from interception import inputs as ic_inputs
 except Exception as e:  # pragma: no cover
@@ -48,7 +53,7 @@ DEFAULT_CONFIG = {
     "battle": {
         "attack_keys": ["e", "q"],
         "interval": 0.5,
-        "confidence": 0.9,
+        "confidence": 0.78,
         "pokemon_list_region": [],
         "pause_targets": [],
         "target_confidence": 0.85,
@@ -68,6 +73,8 @@ DEFAULT_CONFIG = {
         "region": [3, 28, 1910, 993],
         "targets": ["croa.png", "croa_2.png"],
         "alert_on": [],  # avisa com som quando aparecer, mesmo sem capturar
+        "retry_delay": 3,  # segundos entre duas pokébolas no mesmo pokémon
+        "confirm_wait": 4,  # segundos procurando a mensagem de sucesso depois de cada pokébola
     },
     "cavebot": {
         "walk_time": 9,
@@ -92,6 +99,8 @@ DEFAULT_CONFIG = {
         "order_interval": 5,
         "pixel": [],  # ponto da barra de vida do seu Pokémon; vazio = não configurado
         "color": [],
+        "faint_pixel": [],  # começo da barra de vida do seu Pokémon; vazio = não vigia desmaio
+        "faint_color": [],
         "cooldown": 2,
         "interval": 0.3,
     },
@@ -99,6 +108,7 @@ DEFAULT_CONFIG = {
         "pause_unfocused": True,
         "fight_timeout": 60,
         "max_misses": 5,
+        "color_tolerance": 30,  # quanto cada canal (R, G, B) pode variar e ainda contar como a mesma cor
     },
     "alerts": {
         "sound": True,
@@ -131,6 +141,26 @@ DEFAULT_CONFIG = {
     "window_ref": None,  # canto da janela do jogo quando as coordenadas foram marcadas
     "stop_hotkey": "F12",
 }
+
+# A precisão da batalha vazia só vale dentro desta faixa: o painel do jogo varia
+# alguns pixels entre um print e outro, e acima de 0.78 ele quase nunca bate.
+BATTLE_CONFIDENCE_RANGE = (0.55, 0.78)
+
+# Módulos que não podem ligar juntos: atacam, capturam ou trocam ao mesmo tempo.
+CONFLICTS = {
+    "battle": ("combat", "cavebot"),
+    "combat": ("battle", "cavebot", "switch"),
+    "cavebot": ("battle", "combat", "capture"),
+    "capture": ("cavebot",),
+    "switch": ("combat",),
+}
+
+# recortes de mensagens do jogo: captura que deu certo e falta de pokébola
+SUCCESS_IMAGE = "captura_ok/sucesso.png"
+NO_BALL_IMAGE = "captura_ok/sem_pokebola.png"
+MESSAGE_IMAGES = {"success": SUCCESS_IMAGE, "noball": NO_BALL_IMAGE}
+FAINT_READS = 3  # leituras seguidas (1 por segundo) com a barra vazia antes de parar tudo
+LOG_KEEP_DAYS = 30
 
 PICK_HOTKEY = "F8"
 VK_CODES = {f"F{i}": 0x6F + i for i in range(1, 13)}
@@ -175,7 +205,22 @@ def _migrate(cfg):
     old = cave.pop("waypoints", None)
     if old and not cave.get("route"):
         cave["route"] = [{"name": n, "time": cave.get("walk_time", 9)} for n in old]
+    battle = cfg.get("battle")
+    if isinstance(battle, dict) and "confidence" in battle:
+        # mostra no painel a precisão que o bot usa de verdade
+        try:
+            low, high = BATTLE_CONFIDENCE_RANGE
+            battle["confidence"] = round(min(high, max(low, float(battle["confidence"]))), 2)
+        except (TypeError, ValueError):
+            battle.pop("confidence")
     return cfg
+
+
+def _color_close(rgb, target, tolerance):
+    """True se cada canal de rgb está a no máximo `tolerance` do canal de target."""
+    if rgb is None or len(target or []) != 3:
+        return False
+    return all(abs(int(a) - int(b)) <= tolerance for a, b in zip(rgb, target))
 
 
 def _safe_name(name):
@@ -236,6 +281,7 @@ class Stats:
         self.kills = 0
         self.heals = 0
         self.balls = {}
+        self.caught = {}
         self.run_seconds = {name: 0.0 for name in MODULES}
         self.started = {}
 
@@ -258,6 +304,10 @@ class Stats:
         self.balls[pokemon] = self.balls.get(pokemon, 0) + 1
         self._exec("INSERT INTO eventos (tipo, nome, modulo) VALUES ('pokebola', ?, ?)", (pokemon, module))
 
+    def capture(self, pokemon, module):
+        self.caught[pokemon] = self.caught.get(pokemon, 0) + 1
+        self._exec("INSERT INTO eventos (tipo, nome, modulo) VALUES ('captura', ?, ?)", (pokemon, module))
+
     def heal(self):
         self.heals += 1
         self._exec("INSERT INTO eventos (tipo, nome, modulo) VALUES ('cura', NULL, 'heal')", ())
@@ -278,6 +328,7 @@ class Stats:
         since = f"-{days - 1} days"
         with self.lock, self._db() as db:
             total_balls = dict(db.execute("SELECT nome, COUNT(*) FROM eventos WHERE tipo='pokebola' GROUP BY nome").fetchall())
+            total_caught = dict(db.execute("SELECT nome, COUNT(*) FROM eventos WHERE tipo='captura' GROUP BY nome").fetchall())
             total_kills = db.execute("SELECT COUNT(*) FROM eventos WHERE tipo='batalha'").fetchone()[0]
             day_events = db.execute(
                 "SELECT date(quando), tipo, COUNT(*) FROM eventos WHERE date(quando) >= date('now','localtime',?) GROUP BY 1, 2",
@@ -294,11 +345,12 @@ class Stats:
             secs = day_time.get(d, 0) or 0
             if i == 0:  # inclui o que está rodando agora
                 secs += sum(now - t for t in self.started.values())
-            daily.append({"day": d, "balls": ev.get("pokebola", 0), "kills": ev.get("batalha", 0), "seconds": secs})
+            daily.append({"day": d, "balls": ev.get("pokebola", 0), "caught": ev.get("captura", 0),
+                          "kills": ev.get("batalha", 0), "seconds": secs})
         return {
             "session": {"seconds_open": now - self.session_start, "run_seconds": run, "kills": self.kills,
-                        "heals": self.heals, "balls": self.balls},
-            "total": {"kills": total_kills, "balls": total_balls},
+                        "heals": self.heals, "balls": self.balls, "caught": self.caught},
+            "total": {"kills": total_kills, "balls": total_balls, "caught": total_caught},
             "daily": daily,
         }
 
@@ -309,6 +361,7 @@ class Stats:
         self.kills = 0
         self.heals = 0
         self.balls = {}
+        self.caught = {}
         self.run_seconds = {name: 0.0 for name in MODULES}
         self.session_start = time.time()
         self.started = {n: time.time() for n in self.started}
@@ -321,6 +374,8 @@ class BotEngine:
         self.config_path = Path(config_path)
         self.profiles_dir = self.root / "perfis"
         self.logs_dir = self.root / "logs"
+        self._config_lock = threading.RLock()
+        self._config_warning = None
         self.config = self._load_config()
         self.stats = Stats(self.root / "estatisticas.db")
 
@@ -340,6 +395,11 @@ class BotEngine:
         self._capture_order_lock = threading.RLock()
         self._macro_action_lock = threading.RLock()
         self._templates = {}
+        self._screen = threading.local()  # um mss por thread: ele não pode ser compartilhado
+        self._last_throw = {}  # pokémon -> hora da última pokébola
+        self._confirm_lock = threading.Lock()
+        self._confirm = None  # (pokémon, módulo, até quando procurar) da última pokébola
+        self._faint_reads = 0
         self._loot_pause = threading.Event()
         self._pause_state_lock = threading.Lock()
         self._paused_modules = set()
@@ -403,24 +463,64 @@ class BotEngine:
         elif IC_CONFLICT:
             self.log("Tem outro pacote 'interception' instalado por cima do interception-python. "
                      f"Os cliques vão funcionar, mas para corrigir de vez rode: {IC_FIX_CMD}", "warn")
+        if self._config_warning:
+            self.log(self._config_warning, "warn")
+        self._clean_old_logs()
         self.log("Painel pronto.", "success")
 
     # ---------- config ----------
+    @property
+    def _config_backup(self):
+        return self.config_path.with_name(self.config_path.name + ".bak")
+
     def _load_config(self):
-        try:
-            with open(self.config_path, encoding="utf-8") as f:
-                return _merge(DEFAULT_CONFIG, _migrate(json.load(f)))
-        except Exception:
+        """Lê o config.json; se ele estiver corrompido, tenta a cópia config.json.bak."""
+        if not self.config_path.exists():
             return copy.deepcopy(DEFAULT_CONFIG)
+        for path in (self.config_path, self._config_backup):
+            try:
+                with open(path, encoding="utf-8") as f:
+                    cfg = _merge(DEFAULT_CONFIG, _migrate(json.load(f)))
+            except Exception:
+                continue
+            if path != self.config_path:
+                self._config_warning = (f"Não consegui ler o {self.config_path.name}; "
+                                        f"carreguei a cópia de segurança {path.name}.")
+            return cfg
+        keep = self.config_path.with_name(self.config_path.name + ".corrompido")
+        try:
+            shutil.copy2(self.config_path, keep)
+        except OSError:
+            keep = None
+        self._config_warning = (f"Não consegui ler o {self.config_path.name} nem a cópia de segurança; "
+                                "usei as configurações padrão."
+                                + (f" O arquivo antigo foi guardado em {keep.name}." if keep else ""))
+        return copy.deepcopy(DEFAULT_CONFIG)
+
+    def _write_config(self):
+        """Grava num arquivo temporário e troca de uma vez: um travamento no meio não corrompe o config."""
+        tmp = self.config_path.with_name(self.config_path.name + ".tmp")
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(self.config, f, indent=2, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        if self.config_path.exists():
+            try:
+                with open(self.config_path, encoding="utf-8") as f:
+                    json.load(f)
+                shutil.copy2(self.config_path, self._config_backup)
+            except Exception:
+                pass  # não sobrescreve a cópia boa com um arquivo corrompido
+        os.replace(tmp, self.config_path)
 
     def save_config(self, new_config, quiet=False):
         new_config = _migrate(dict(new_config))
         # a referência da janela é gerenciada pelo motor; o painel pode estar com uma cópia velha
         if not new_config.get("window_ref") and self.config.get("window_ref"):
             new_config["window_ref"] = self.config["window_ref"]
-        self.config = _merge(DEFAULT_CONFIG, new_config)
-        with open(self.config_path, "w", encoding="utf-8") as f:
-            json.dump(self.config, f, indent=2, ensure_ascii=False)
+        with self._config_lock:
+            self.config = _merge(DEFAULT_CONFIG, new_config)
+            self._write_config()
         if not quiet:
             self.log("Configurações salvas.", "success")
         return self.config
@@ -477,6 +577,16 @@ class BotEngine:
         if module:
             self._status[module] = msg
 
+    def _clean_old_logs(self):
+        """Apaga os logs diários com mais de LOG_KEEP_DAYS dias."""
+        limit = time.time() - LOG_KEEP_DAYS * 86400
+        try:
+            for path in self.logs_dir.glob("*.txt"):
+                if path.stat().st_mtime < limit:
+                    path.unlink()
+        except OSError:
+            pass
+
     def open_logs_folder(self):
         self.logs_dir.mkdir(exist_ok=True)
         os.startfile(self.logs_dir)
@@ -498,7 +608,7 @@ class BotEngine:
             out["pick"] = {k: pick[k] for k in ("id", "kind", "target", "points", "result", "cancelled")}
             if pg is not None and pick["result"] is None and not pick["cancelled"]:
                 x, y = pg.position()
-                out["pick"]["mouse"] = {"x": x, "y": y, "rgb": list(self._pixel(x, y))}
+                out["pick"]["mouse"] = {"x": x, "y": y, "rgb": list(self._pixel(x, y) or (0, 0, 0))}
         return out
 
     def is_running(self, name):
@@ -618,6 +728,7 @@ class BotEngine:
                 self.stop_all()
                 self.alert("A janela do jogo sumiu: parei tudo.")
             was_found = found
+            self._check_faint()
 
             if self._deadline and time.time() >= self._deadline:
                 self._deadline = None
@@ -627,6 +738,29 @@ class BotEngine:
                 else:
                     self.log("Timer acabou.", "info")
             time.sleep(1)
+
+    def _tolerance(self):
+        try:
+            return max(0, int(self.config["safety"].get("color_tolerance", 30)))
+        except (TypeError, ValueError):
+            return 30
+
+    def _check_faint(self):
+        """Para tudo quando o começo da barra de vida do seu pokémon perde a cor (desmaiou)."""
+        c = self.config["heal"]
+        point, color = c.get("faint_pixel") or [], c.get("faint_color") or []
+        if len(point) != 2 or len(color) != 3 or not self.any_running() or not self._health["focused"]:
+            self._faint_reads = 0
+            return
+        rgb = self._pixel(*self._abs_point(point))
+        if rgb is None or _color_close(rgb, color, self._tolerance()):
+            self._faint_reads = 0
+            return
+        self._faint_reads += 1
+        if self._faint_reads >= FAINT_READS:
+            self._faint_reads = 0
+            self.stop_all()
+            self.alert("Seu Pokémon desmaiou: parei tudo.")
 
     def _wait_ready(self, stop, module):
         """Segura o módulo enquanto o jogo não estiver em primeiro plano. False se mandaram parar."""
@@ -900,8 +1034,32 @@ class BotEngine:
         self._templates[rel_path] = (mtime, tpl)
         return tpl
 
+    def _screen_grabber(self):
+        """Uma instância do mss por thread (mais rápido que o print do pyautogui)."""
+        if mss is None:
+            return None
+        sct = getattr(self._screen, "sct", None)
+        if sct is None:
+            try:
+                sct = self._screen.sct = mss.mss()
+            except Exception:
+                return None
+        return sct
+
     def _grab(self, region=None):
         region = tuple(int(v) for v in region) if region else None
+        sct = self._screen_grabber()
+        if sct is not None:
+            if region:
+                box = {"left": region[0], "top": region[1], "width": region[2], "height": region[3]}
+            else:
+                primary = sct.monitors[1]  # mesma tela que o pyautogui usa
+                box = {k: primary[k] for k in ("left", "top", "width", "height")}
+            try:
+                img = np.ascontiguousarray(np.asarray(sct.grab(box))[:, :, :3])  # BGRA -> BGR
+                return img, (box["left"], box["top"])
+            except Exception:
+                self._screen.sct = None  # tenta de novo com uma instância nova na próxima vez
         shot = pg.screenshot(region=region)
         img = cv2.cvtColor(np.array(shot), cv2.COLOR_RGB2BGR)
         return img, (region[0], region[1]) if region else (0, 0)
@@ -929,10 +1087,15 @@ class BotEngine:
         return pg.Point(offset[0] + x + tw // 2, offset[1] + y + th // 2)
 
     def _pixel(self, x, y):
+        """Cor (R, G, B) do pixel, ou None se a leitura falhar."""
         try:
+            sct = self._screen_grabber()
+            if sct is not None:
+                b, g, r = np.asarray(sct.grab({"left": int(x), "top": int(y), "width": 1, "height": 1}))[0, 0, :3]
+                return (int(r), int(g), int(b))
             return tuple(pg.pixel(int(x), int(y)))
         except Exception:
-            return (0, 0, 0)
+            return None
 
     def test_detection(self, kind):
         """Uma busca só, com print marcando o que achou — para ajustar precisão e áreas."""
@@ -997,7 +1160,8 @@ class BotEngine:
             target_detected = self._battle_target_is_present()
             x, y = self._abs_point(cfg["cavebot"]["hp_pixel"])
             rgb = self._pixel(x, y)
-            extra = {"hp_pixel": [x, y], "rgb": list(rgb), "matches": list(rgb) == list(cfg["cavebot"]["hp_color"])}
+            extra = {"hp_pixel": [x, y], "rgb": list(rgb or (0, 0, 0)),
+                     "matches": _color_close(rgb, cfg["cavebot"]["hp_color"], self._tolerance())}
             cv2.circle(canvas, (int(x), int(y)), 10 * thick, (255, 112, 169), thick)
 
         self.log(f"Teste de detecção ({kind}): {sum(r['found'] for r in results)}/{len(results)} encontrados.", "info")
@@ -1029,11 +1193,11 @@ class BotEngine:
         if not pick or pick["result"] is not None or pick["cancelled"]:
             return
         x, y = pg.position()
-        rgb = list(self._pixel(x, y))
+        rgb = list(self._pixel(x, y) or (0, 0, 0))
         pick["points"].append([x, y])
         self._beep()
         # coordenadas salvas na config ficam no "referencial" da janela; recortes usam a tela real
-        if pick["target"] in ("new_pokemon", "new_waypoint", "new_battle_target"):
+        if pick["target"] in ("new_pokemon", "new_waypoint", "new_battle_target", "msg_success", "msg_noball"):
             dx = dy = 0
         else:
             if not self.config.get("window_ref") and self._game_rect:
@@ -1068,6 +1232,14 @@ class BotEngine:
             return True
         if pg is None or ic is None:
             self.log("Dependências faltando (veja os erros acima). Módulo não iniciado.", "error", name)
+            return False
+        blockers = [MODULES[other] for other in CONFLICTS.get(name, ()) if self.is_running(other)]
+        if blockers:
+            if len(blockers) == 1:
+                msg = f"{blockers[0]} já está ligado e os dois brigariam pelo teclado e pelo mouse. Desligue um deles primeiro."
+            else:
+                msg = f"{' e '.join(blockers)} já estão ligados e brigariam pelo teclado e pelo mouse. Desligue esses módulos primeiro."
+            self.log(f"Não liguei: {msg}", "error", name)
             return False
         if name in ("battle", "combat", "cavebot"):
             battle = self.config["battle"]
@@ -1398,18 +1570,14 @@ class BotEngine:
 
     def _right_click(self, x, y, stop=None):
         """Clique direito serializado."""
-        while True:
-            if stop is not None and not self._wait_ready(stop, "loot"):
-                return False
-            pause_requested = False
-            with self._capture_order_lock:
-                with self._mouse_action_lock:
-                    pg.moveTo(x, y)
-                    time.sleep(0.12)
-                    ic.right_click()
-                    return True
-            if pause_requested and stop is not None and not self._wait_ready(stop, "loot"):
-                return False
+        if stop is not None and not self._wait_ready(stop, "loot"):
+            return False
+        with self._capture_order_lock:
+            with self._mouse_action_lock:
+                pg.moveTo(x, y)
+                time.sleep(0.12)
+                ic.right_click()
+                return True
 
     def _ball_key(self, pokemon=None):
         overrides = self.config["capture"].get("keys", {})
@@ -1420,13 +1588,17 @@ class BotEngine:
         return key or "1"
 
     def _attack(self):
-        for key in self.config["battle"]["attack_keys"]:
-            ic.press(key)
+        # espera uma pokébola em andamento (tecla + clique) terminar antes de apertar E/Q
+        with self._capture_order_lock:
+            for key in self.config["battle"]["attack_keys"]:
+                ic.press(key)
 
     def _try_capture_once(self, module):
-        """Uma passada pelos alvos com um único print da tela. Retorna True se clicou em algum."""
+        """Uma passada pelos alvos. Retorna True se jogou pokébola em algum."""
         c = self.config["capture"]
-        img, offset = self._grab(self._abs_region(c["region"]))
+        region = self._abs_region(c["region"])
+        img, offset = self._grab(region)
+        retry_delay = max(0.0, float(c.get("retry_delay", 3) or 0))
         caught = False
         for name in dict.fromkeys(c["targets"] + c["alert_on"]):
             pos = self._locate(f"captura/{name}", c["confidence"], img=img, offset=offset)
@@ -1437,6 +1609,9 @@ class BotEngine:
                 self._alerted[name] = time.time()
                 self.alert(f"{poke} apareceu na tela!", "success", module)
             if name in c["targets"]:
+                if time.monotonic() - self._last_throw.get(name, -1e9) < retry_delay:
+                    continue  # ainda esperando a pokébola anterior neste pokémon
+                self._last_throw[name] = time.monotonic()
                 self.log(f"{poke} encontrado, jogando pokébola.", "success", module)
                 reason = f"capture:{module}:{name}"
                 self._set_macro_pause(reason, True)
@@ -1449,7 +1624,89 @@ class BotEngine:
                     self._set_macro_pause(reason, False)
                 self.stats.ball(poke, module)
                 caught = True
+                if self._out_of_balls(module):
+                    return True
+                self._watch_success(poke, module)
+                # a tela mudou com o arremesso: os próximos alvos usam um print novo
+                img, offset = self._grab(region)
         return caught
+
+    def _out_of_balls(self, module):
+        """Depois de jogar, vê se o jogo avisou que acabaram as pokébolas. Se sim, desliga o módulo."""
+        if not self.has_message_image("noball"):
+            return False
+        time.sleep(0.5)
+        if not self._locate(NO_BALL_IMAGE, self.config["capture"]["confidence"]):
+            return False
+        self.stop(module, "Sem pokébolas")
+        artigo = "a" if MODULES[module].endswith("a") else "o"
+        self.alert(f"Acabaram as pokébolas: desliguei {artigo} {MODULES[module]}.", "error", module)
+        return True
+
+    # ---------- mensagens do jogo (captura confirmada, sem pokébola) ----------
+    MESSAGE_LOGS = {
+        "success": ("Mensagem de captura salva: agora o bot conta as capturas confirmadas.",
+                    "Mensagem de captura removida: o bot volta a contar só as pokébolas."),
+        "noball": ("Mensagem de sem pokébola salva: o bot para quando elas acabarem.",
+                   "Mensagem de sem pokébola removida: o bot não vigia mais as pokébolas."),
+    }
+
+    def has_message_image(self, kind):
+        return (self.img / MESSAGE_IMAGES[kind]).exists()
+
+    def message_images(self):
+        return {kind: self.has_message_image(kind) for kind in MESSAGE_IMAGES}
+
+    def set_message_image(self, kind, region):
+        """Recorta da tela uma mensagem do jogo (kind: success ou noball)."""
+        if kind not in MESSAGE_IMAGES or len(region or []) != 4:
+            raise ValueError("Marque a mensagem com os dois cantos.")
+        img, _ = self._grab(region)
+        dest = self.img / MESSAGE_IMAGES[kind]
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        _write_png(dest, img)
+        self.log(self.MESSAGE_LOGS[kind][0], "success")
+        return True
+
+    def remove_message_image(self, kind):
+        if kind not in MESSAGE_IMAGES:
+            raise ValueError(kind)
+        path = self.img / MESSAGE_IMAGES[kind]
+        if path.exists():
+            path.unlink()
+        self.log(self.MESSAGE_LOGS[kind][1], "info")
+
+    def _watch_success(self, poke, module):
+        """Depois de uma pokébola, procura a mensagem de sucesso por alguns segundos numa thread à parte."""
+        if not self.has_message_image("success"):
+            return
+        until = time.time() + float(self.config["capture"].get("confirm_wait", 4) or 4)
+        with self._confirm_lock:
+            running = self._confirm is not None
+            self._confirm = (poke, module, until)  # outra pokébola só troca o alvo e estende o prazo
+        if not running:
+            threading.Thread(target=self._confirm_loop, daemon=True).start()
+
+    def _confirm_loop(self):
+        conf = self.config["capture"]["confidence"]
+        # a mensagem de uma captura anterior pode continuar na tela: só conta quando ela aparece
+        # (não estava visível e passou a estar), nunca porque já estava lá
+        visible = bool(self._locate(SUCCESS_IMAGE, conf))
+        while True:
+            with self._confirm_lock:
+                poke, module, until = self._confirm
+                if time.time() > until:
+                    self._confirm = None
+                    return
+            time.sleep(0.3)
+            seen = bool(self._locate(SUCCESS_IMAGE, conf))
+            if seen and not visible:
+                self.stats.capture(poke, module)
+                self.log(f"{poke} capturado!", "success", module)
+                with self._confirm_lock:
+                    self._confirm = None
+                return
+            visible = seen
 
     # ---------- módulos ----------
     def _run_switch(self, stop):
@@ -1791,7 +2048,10 @@ class BotEngine:
                         self._capture_order_lock.release()
             if len(c.get("pixel") or []) == 2 and len(c.get("color") or []) == 3:
                 x, y = self._abs_point(c["pixel"])
-                if list(self._pixel(x, y)) != list(c["color"]) and time.time() - last >= c["cooldown"]:
+                rgb = self._pixel(x, y)
+                # leitura que falhou (None) não conta como vida baixa
+                low = rgb is not None and not _color_close(rgb, c["color"], self._tolerance())
+                if low and time.time() - last >= c["cooldown"]:
                     ic.press(c["key"])
                     last = time.time()
                     self.stats.heal()
@@ -1951,7 +2211,7 @@ class BotEngine:
             for name in dict.fromkeys(names)
         )
 
-    # ---------- opacidade (mesma lógica de opacity.py) ----------
+    # ---------- opacidade ----------
     def set_opacity(self, value):
         windows = self._find_game_windows()
         if not windows:

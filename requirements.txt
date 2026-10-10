@@ -1,4 +1,0 @@
-interception-python==1.13.6
-opencv-python
-pyautogui
-pywin32

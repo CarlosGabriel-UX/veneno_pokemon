@@ -13,6 +13,7 @@ const PICK_TARGETS = {
   "capture.region": "Área de captura",
   "cavebot.hp_pixel": "Pixel da vida do inimigo",
   "heal.pixel": "Pixel da sua vida",
+  "heal.faint_pixel": "Pixel de desmaio",
   "heal.order_point": "Ponto da Order",
   "loot.center": "Centro do tile do personagem",
   "loot.north": "Centro do tile vizinho ao norte",
@@ -26,6 +27,8 @@ const PICK_TARGETS = {
   new_battle_empty: "Definir a referência da lista de batalha vazia",
   new_waypoint: "Recortar ponto do minimapa",
   switch_slot: "Posição de troca",
+  msg_success: "Recortar a mensagem de captura confirmada",
+  msg_noball: "Recortar a mensagem de sem pokébola",
 };
 const FKEYS = Array.from({ length: 12 }, (_, i) => `F${i + 1}`);
 
@@ -205,10 +208,19 @@ function appendLogs(logs) {
     if (l.module) row.append(el("span", "tag", `[${moduleEls[l.module]?.label || l.module}]`));
     row.append(l.msg);
     box.append(row);
+    if (l.level === "error" && !$("#tab-console").classList.contains("active")) unseenErrors++;
   }
+  renderLogBadge();
   while (box.childElementCount > 800) box.firstElementChild.remove();
   applyLogFilter();
   if (stick) box.scrollTop = box.scrollHeight;
+}
+
+let unseenErrors = 0;
+function renderLogBadge() {
+  const badge = $("#log-badge");
+  badge.hidden = !unseenErrors;
+  badge.textContent = unseenErrors > 99 ? "99+" : unseenErrors;
 }
 
 function applyLogFilter() {
@@ -375,6 +387,12 @@ async function applyPick(target, result) {
     toast(`Alvo "${pendingBattleTargetName}" adicionado`);
     return;
   }
+  if (target === "msg_success" || target === "msg_noball") {
+    await call("set_message_image", target.slice(4), result.region);
+    await refreshImages();
+    toast("Mensagem salva");
+    return;
+  }
   if (target === "new_battle_empty") {
     await call("set_battle_empty_from_region", result.region);
     config = await api.get_config();
@@ -420,7 +438,7 @@ async function applyPick(target, result) {
   if (result.region) input.value = result.region.join(", ");
   else {
     input.value = `${result.x}, ${result.y}`;
-    const colorPath = { "cavebot.hp_pixel": "cavebot.hp_color", "heal.pixel": "heal.color" }[target];
+    const colorPath = { "cavebot.hp_pixel": "cavebot.hp_color", "heal.pixel": "heal.color", "heal.faint_pixel": "heal.faint_color" }[target];
     if (colorPath) $(`[data-path="${colorPath}"]`).value = result.rgb.join(", ");
   }
   config = { ...config, window_ref: (await api.get_config()).window_ref };
@@ -709,6 +727,18 @@ async function refreshImages() {
   buildCaptureGrid();
   buildBattleTargetGrid();
   buildRoute();
+  renderMessages();
+}
+
+function renderMessages() {
+  const saved = images.messages || {};
+  for (const row of $$(".msg-row")) {
+    const on = !!saved[row.dataset.msg];
+    const state = $(".msg-state", row);
+    state.textContent = on ? "recortada" : "não configurada";
+    state.classList.toggle("on", on);
+    $("[data-msg-remove]", row).disabled = !on;
+  }
 }
 
 function openAddPokemon() {
@@ -1046,6 +1076,7 @@ async function refreshStats() {
   $("#k-time").textContent = fmtDuration(totalRun);
   $("#k-kills").textContent = s.session.kills;
   $("#k-balls").textContent = sessionBalls;
+  $("#k-caught").textContent = Object.values(s.session.caught || {}).reduce((a, b) => a + b, 0);
   $("#k-heals").textContent = s.session.heals;
   $("#k-total").textContent = totalBalls;
 
@@ -1080,13 +1111,18 @@ async function refreshStats() {
   );
   for (const n of names) {
     const tr = el("tr");
-    tr.append(el("td", null, pretty(n)), el("td", "num", s.session.balls[n] || 0), el("td", "num", s.total.balls[n] || 0));
+    tr.append(
+      el("td", null, pretty(n)),
+      el("td", "num", s.session.balls[n] || 0),
+      el("td", "num", s.total.balls[n] || 0),
+      el("td", "num", (s.total.caught || {})[n] || 0),
+    );
     body.append(tr);
   }
   if (!names.length) {
     const tr = el("tr");
     const td = el("td", "empty", "Nenhuma pokébola jogada ainda.");
-    td.colSpan = 3;
+    td.colSpan = 4;
     tr.append(td);
     body.append(tr);
   }
@@ -1121,6 +1157,11 @@ function wireUi() {
     tab.addEventListener("click", () => {
       $$(".tab").forEach((t) => t.classList.toggle("active", t === tab));
       $$(".tab-body").forEach((b) => b.classList.toggle("active", b.id === `tab-${tab.dataset.tab}`));
+      $("#panel-title").textContent = tab.title;
+      if (tab.dataset.tab === "console") {
+        unseenErrors = 0;
+        renderLogBadge();
+      }
       clearInterval(statsTimer);
       if (tab.dataset.tab === "stats") {
         refreshStats();
@@ -1193,6 +1234,14 @@ function wireUi() {
   $("#add-poke").addEventListener("click", openAddPokemon);
   $("#battle-target-add").addEventListener("click", openAddBattleTarget);
   $("#battle-empty-pick").addEventListener("click", () => startPick("region", "new_battle_empty"));
+  $$("[data-msg-pick]").forEach((b) => b.addEventListener("click", () => startPick("region", `msg_${b.dataset.msgPick}`)));
+  $$("[data-msg-remove]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      await call("remove_message_image", b.dataset.msgRemove);
+      await refreshImages();
+      toast("Mensagem removida");
+    }),
+  );
   $("#add-waypoint").addEventListener("click", openAddWaypoint);
   $('[data-path="battle.long_battle_enabled"]').addEventListener("change", async (event) => {
     if (event.currentTarget.checked && Number($('[data-path="battle.long_battle_after"]').value) < 1) {
@@ -1554,6 +1603,7 @@ async function init() {
   buildModules(images.modules);
   buildCaptureGrid();
   buildBattleTargetGrid();
+  renderMessages();
   wireRouteDnD();
   await renderMacroList(config.macro?.name);
   applyConfig();

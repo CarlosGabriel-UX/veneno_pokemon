@@ -16,6 +16,9 @@ game-bot-dashboard/dist/
 perfis/
 macros/
 imags/mascotes/
+imags/captura_ok/
+*.tmp
+*.corrompido
 *.bak
 *.orig
 
