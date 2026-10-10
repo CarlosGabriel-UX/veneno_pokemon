@@ -7,6 +7,13 @@ import urllib.request
 import webbrowser
 from pathlib import Path
 
+if sys.stdout is None or sys.stderr is None:
+    # Sem terminal (pythonw / Abrir painel.vbs / .exe): o que seria impresso, como erros
+    # inesperados, vai para logs/saida.txt em vez de sumir.
+    _logs = (Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parents[2]) / "logs"
+    _logs.mkdir(exist_ok=True)
+    sys.stdout = sys.stderr = open(_logs / "saida.txt", "a", encoding="utf-8", buffering=1)
+
 import webview
 
 from engine import MODULES, PANEL_TITLE, PICK_HOTKEY, BotEngine
@@ -45,6 +52,18 @@ def check_update():
     except Exception:
         pass
     return None
+
+
+def hide_own_console():
+    """Esconde o terminal preto quando ele foi aberto só para o painel (dois cliques no main.py).
+    Se o painel foi aberto de um cmd que já estava aberto, deixa o cmd em paz."""
+    kernel32 = ctypes.windll.kernel32
+    hwnd = kernel32.GetConsoleWindow()
+    if not hwnd:
+        return
+    pids = (ctypes.c_uint * 4)()
+    if kernel32.GetConsoleProcessList(pids, 4) == 1:
+        ctypes.windll.user32.ShowWindow(hwnd, 0)  # SW_HIDE
 
 
 def already_running():
@@ -281,6 +300,7 @@ class API:
 
 
 if __name__ == "__main__":
+    hide_own_console()
     if already_running():
         sys.exit(0)
     engine = BotEngine(ROOT, ROOT / "config.json")

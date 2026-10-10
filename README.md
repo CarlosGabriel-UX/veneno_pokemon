@@ -56,6 +56,8 @@ pip install -r requirements.txt
 python src/main.py
 ```
 
+Depois de instalar, para abrir o painel sem o terminal preto, dê dois cliques em **`Abrir painel.vbs`** na pasta do projeto (dá para criar um atalho dele na área de trabalho).
+
 Depois:
 
 1. Abra o jogo e entre no personagem. O painel procura a janela pelo título `otPokemon | Lisalon | South America`; se o seu for diferente, troque em **Ajustes > Título da janela**.

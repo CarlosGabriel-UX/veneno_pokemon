@@ -57,6 +57,8 @@ pip install -r requirements.txt
 python src/main.py
 ```
 
+Para abrir sem o terminal preto, use **`Abrir painel.vbs`** na raiz do repositório. Se abrir o `main.py` com dois cliques, o terminal que o Windows cria é escondido sozinho.
+
 O driver do [Interception](https://github.com/oblitum/Interception) precisa estar instalado, igual nos scripts originais.
 
 ## Gerar o .exe
