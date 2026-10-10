@@ -16,7 +16,7 @@ REPO = "Lis-Alon/Veneno_do_pokemon"
 
 if getattr(sys, "frozen", False):
     # .exe gerado pelo PyInstaller: a pasta imags/ e o config.json ficam ao lado do .exe
-    ROOT = Path(sys.executable).parent
+    ROOT = Path(sys.executable).parent1
 else:
     # rodando do código-fonte: raiz do repositório (onde está a pasta imags/)
     ROOT = Path(__file__).resolve().parents[2]
@@ -81,8 +81,10 @@ class API:
         state["macro"] = self._engine.macro_state()
         return state
 
-    def toggle_module(self, name, state):
+    def toggle_module(self, name, state, macro_name=None, macro_loop=False):
         if state:
+            if name == "macro":
+                self._engine.configure_macro_module(macro_name, macro_loop)
             return self._engine.start(name)
         self._engine.stop(name)
         return False
@@ -124,8 +126,27 @@ class API:
             "modules": MODULES,
             "pick_hotkey": PICK_HOTKEY,
             "capture": [encode("captura", n) for n in self._engine.capture_images()],
+            "battle_targets": [encode("battle/pokemon_list", n) for n in self._engine.battle_target_images()],
             "waypoints": [encode("map", n) for n in self._engine.map_waypoints()],
         }
+
+    def add_battle_target_from_region(self, name, region):
+        return self._engine.add_battle_target_image(name, region)
+
+    def remove_battle_target(self, name):
+        return self._engine.remove_battle_target_image(name)
+
+    def set_battle_empty_from_region(self, region):
+        return self._engine.set_battle_empty_from_region(region)
+
+    def capture_loot_anchor(self, region):
+        return self._engine.capture_loot_anchor(region)
+
+    def locate_loot_window(self):
+        return self._engine.locate_loot_window()
+
+    def capture_loot_empty_slot(self):
+        return self._engine.capture_loot_empty_slot()
 
     def add_pokemon_from_file(self, name):
         kind = getattr(getattr(webview, "FileDialog", None), "OPEN", None) or webview.OPEN_DIALOG
@@ -144,6 +165,12 @@ class API:
     def add_waypoint_from_region(self, region):
         return self._engine.add_waypoint(region)
 
+    def start_route_recording(self):
+        return self._engine.start_route_recording()
+
+    def stop_route_recording(self):
+        return self._engine.stop_route_recording()
+
     def remove_waypoint(self, name):
         self._engine.remove_waypoint(name)
 
@@ -161,16 +188,29 @@ class API:
     def list_macros(self):
         return self._engine.list_macros()
 
+    def get_macro_options(self, name):
+        return self._engine.get_macro_options(name)
+
+    def set_macro_pause_on_events(self, name, pause_on_events):
+        return self._engine.set_macro_pause_on_events(name, pause_on_events)
+
+    def set_macro_options(self, name, options):
+        return self._engine.set_macro_options(name, options)
+
     def delete_macro(self, name):
         return self._engine.delete_macro(name)
-    def start_macro_recording(self, name, duration):
-        return self._engine.start_macro_recording(name, duration)
+
+    def configure_macro_module(self, name, loop=False):
+        return self._engine.configure_macro_module(name, loop)
+
+    def start_macro_recording(self, name, duration, pause_on_events=True, resume_delay_seconds=0, event_options=None, arrows_only=False):
+        return self._engine.start_macro_recording(name, duration, pause_on_events, resume_delay_seconds, event_options, arrows_only)
 
     def stop_macro_recording(self):
         return self._engine.stop_macro_recording()
 
-    def play_macro(self, name):
-        return self._engine.play_macro(name)
+    def play_macro(self, name, loop=False):
+        return self._engine.play_macro(name, loop)
 
     def stop_macro_playback(self):
         return self._engine.stop_macro_playback()
@@ -181,6 +221,9 @@ class API:
 
     def set_switch_slot_point(self, slot_id, x, y):
         return self._engine.set_switch_slot_point(slot_id, x, y)
+
+    def move_switch_slot(self, slot_id, delta):
+        return self._engine.move_switch_slot(slot_id, delta)
 
     def remove_switch_slot(self, slot_id):
         return self._engine.remove_switch_slot(slot_id)

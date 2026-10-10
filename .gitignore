@@ -21,3 +21,8 @@ imags/mascotes/
 
 # Lixeira do painel (imagens removidas pelo botão de remover)
 imags/*/removidos/
+
+# Solver do minigame de pareamento (fica fora do GitHub)
+minigame.py
+suporte.py
+imags/map/areaminigame.png

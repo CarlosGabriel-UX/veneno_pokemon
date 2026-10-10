@@ -8,6 +8,8 @@ Janela para ligar e desligar o bot sem usar o terminal.
 - **Batalha**: ataca (`e`, `q`) quando aparece inimigo (`battle.py`)
 - **Captura**: procura os pokémons marcados e joga a pokébola (`captura.py`)
 - **Cavebot**: segue a rota do minimapa, luta e captura (`cave bot.py`)
+- **Combate**: escolhe entre somente batalha, batalha com ciclo de troca ou apenas troca
+- **Troca**: ciclo independente entre os Pokémon na ordem configurada
 - **Cura**: aperta a tecla de cura quando um pixel da barra de vida do seu pokémon muda de cor
 - **Parar tudo**: botão no topo ou **F12** (configurável); cada módulo também pode ter um atalho próprio
 
@@ -27,7 +29,8 @@ Janela para ligar e desligar o bot sem usar o terminal.
 
 **Abas**
 - **Console**: log ao vivo, filtro por módulo e botão para abrir a pasta `logs/` (um arquivo por dia, bom para mandar quando der problema)
-- **Captura**: escolha os pokémons clicando nas fotos, 🔔 para só avisar quando aparecer; **+ Adicionar pokémon** (de um arquivo ou recortando direto da tela); **Testar detecção** mostra um print com o que foi achado e a nota de cada imagem
+- **Captura**: escolha os pokémons clicando nas fotos, configure uma tecla por Pokémon (vazio usa a tecla padrão), 🔔 para só avisar quando aparecer; **+ Adicionar pokémon** (de um arquivo ou recortando direto da tela); **Testar detecção** mostra um print com o que foi achado e a nota de cada imagem
+- **Macros**: grava apenas teclas e pode reproduzir junto dos módulos; pausa durante batalhas e ações de captura
 - **Rota**: arraste para mudar a ordem, ligue/desligue pontos, tempo de caminhada por ponto, **+ Adicionar ponto** recortando do minimapa; **Testar minimapa**
 - **Estatísticas**: números da sessão, gráficos dos últimos 14 dias e pokébolas por pokémon (salvo em `estatisticas.db`)
 - **Ajustes**: perfis, coordenadas com **Marcar/Pegar** (posicione o mouse no jogo e aperte **F8**), cura, segurança, atalhos, batalha e título da janela
