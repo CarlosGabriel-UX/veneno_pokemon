@@ -59,6 +59,7 @@ let api = null;
 let config = null;
 let images = null;
 let lastSeq = 0;
+let configRev = null;
 let pickKey = "F8";
 let pickHandled = null;
 let pendingPokemonName = "";
@@ -260,6 +261,14 @@ async function poll() {
   try {
     const s = await api.get_state(lastSeq);
     if (s.logs.length) lastSeq = s.logs[s.logs.length - 1].seq;
+    if (configRev === null) configRev = s.config_rev;
+    else if (s.config_rev !== configRev) {
+      // o celular trocou o perfil: recarrega para o Salvar daqui não desfazer a troca
+      configRev = s.config_rev;
+      config = await api.get_config();
+      applyConfig();
+      toast(`Perfil "${config.profile || ""}" carregado pelo celular`);
+    }
     appendLogs(s.logs);
     $("#route-record").disabled = Boolean(s.route_recording);
     $("#route-record-stop").disabled = !s.route_recording;
@@ -1244,6 +1253,53 @@ async function renderProfiles() {
   $("#profile-delete").disabled = !config.profile;
 }
 
+// ---------- celular ----------
+function renderRemote(info) {
+  $("#remote-enabled").checked = info.enabled;
+  const live = info.enabled && info.running;
+  const url = info.urls[0] || info.tailscale[0] || "";
+  $("#remote-details").hidden = !live;
+  $("#remote-qr").hidden = !live || !url;
+  $("#remote-error").hidden = !info.error && (!live || url);
+  $("#remote-error").textContent = info.error || (live && !url ? "Não achei o IP deste PC na rede. Confira se o Wi-Fi ou o cabo está conectado." : "");
+  if (!live) return;
+  $("#remote-url").textContent = url || "—";
+  $("#remote-pin").textContent = info.pin;
+  const tail = info.tailscale.filter((u) => u !== url);
+  $("#remote-tailscale").hidden = !tail.length;
+  $("#remote-tailscale").textContent = tail.length ? `Fora de casa, com a Tailscale ligada no celular: ${tail.join(", ")}` : "";
+  if (url && window.qrcode) {
+    // o PIN vai depois do #, que o navegador não envia pela rede
+    const qr = qrcode(0, "M");
+    qr.addData(`${url}/#pin=${info.pin}`);
+    qr.make();
+    $("#remote-qr").innerHTML = qr.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
+  }
+}
+
+function wireRemote() {
+  $("#remote-enabled").addEventListener("change", async (e) => {
+    const info = await call("set_remote", e.target.checked).catch(() => null);
+    if (!info) return (e.target.checked = !e.target.checked);
+    renderRemote(info);
+    if (info.enabled && info.running) toast("Controle pelo celular ligado");
+  });
+  $("#remote-new-pin").addEventListener("click", async () => {
+    if (!confirm("Gerar outro PIN? O celular que já está conectado vai pedir o PIN novo.")) return;
+    renderRemote(await call("new_remote_pin"));
+    toast("PIN novo gerado");
+  });
+  $("#remote-copy").addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText($("#remote-url").textContent);
+      toast("Endereço copiado");
+    } catch {
+      toast("Não consegui copiar; selecione o endereço e use Ctrl+C", true);
+    }
+  });
+  api.get_remote().then(renderRemote).catch(() => {});
+}
+
 // ---------- versão ----------
 async function checkVersion() {
   const v = await api.get_version();
@@ -1712,6 +1768,7 @@ async function init() {
   applyConfig();
   wireUi();
   wireCaptureTools();
+  wireRemote();
   buildSettingsJump();
   decorateButtons();
   poll();

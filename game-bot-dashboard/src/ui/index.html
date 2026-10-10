@@ -469,6 +469,23 @@
           <label>Parar tudo <select data-path="stop_hotkey" class="hk"></select></label>
         </div>
 
+        <h3 class="sub-title">Celular</h3>
+        <p class="hint">Liga, desliga e acompanha o bot pelo celular, conectado no mesmo Wi-Fi do PC. Calibrar pontos e recortar imagens continua só aqui.</p>
+        <div class="remote">
+          <div class="remote-main">
+            <label class="switch-control"><span class="switch"><input id="remote-enabled" type="checkbox"><span></span></span> Controlar pelo celular</label>
+            <div id="remote-details" hidden>
+              <p class="remote-step">Aponte a câmera do celular para o QR code ou abra o endereço no navegador:</p>
+              <p class="remote-url"><code id="remote-url"></code> <button id="remote-copy" class="btn small ghost" type="button">Copiar</button></p>
+              <p class="remote-step">PIN <strong id="remote-pin" class="remote-pin"></strong> <button id="remote-new-pin" class="btn small ghost" type="button">Gerar outro PIN</button></p>
+              <p class="hint" id="remote-tailscale" hidden></p>
+              <p class="hint">Se o Windows perguntar sobre o firewall, permita em <b>Redes privadas</b>. No celular, use "Adicionar à tela inicial" para abrir como app.</p>
+            </div>
+            <p class="hint error-text" id="remote-error" hidden></p>
+          </div>
+          <div class="remote-qr" id="remote-qr" hidden aria-label="QR code para abrir no celular"></div>
+        </div>
+
         <h3 class="sub-title">Geral</h3>
         <div class="fields">
           <label class="wide">Título da janela do jogo <input data-path="window_title" type="text"></label>
@@ -504,6 +521,7 @@
     </section>
   </template>
 
+  <script src="vendor/qrcode.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
